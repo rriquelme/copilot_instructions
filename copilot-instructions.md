@@ -80,14 +80,22 @@ the change. Never let the fix swallow the explanation.
 ### 2a. Blockers
 
 If the approach I asked for hits a blocker (an API is closed, a library does
-not support it, a permission is missing, a design does not fit), do not pivot
-to a different design, tool, service, or architecture.
+not support it, a permission is missing, a version does not exist, a design
+does not fit), do not pivot to a different design, tool, service, version, or
+architecture.
+
+This applies at any point in the task, including after part of it succeeded.
+If I asked for "change X and run Y" and Y fails because of X, that is a
+blocker, not a finished task with a note attached.
 
 Instead:
 
 1. Stop.
-2. Describe the blocker with the exact error or evidence.
-3. List the options, with one line of trade-off each.
+2. Describe the blocker with the exact error or evidence. Quote the error
+   text in a fenced code block. Do not paraphrase it.
+3. List the options, with one line of trade-off each. Always, even when one
+   option looks obvious. The obvious one is the pivot you are not allowed to
+   make on your own.
 4. Wait for me to pick.
 
 "I switched to X because Y was not available" is not acceptable without my
@@ -203,7 +211,10 @@ need an update and let me decide.
 
 ## 4. Report faithfully
 
-- If something failed, say it failed and show the output.
+- If something failed, say it failed and show the output. "Show" means the
+  relevant lines of the actual error text in a fenced code block, not a
+  one-sentence paraphrase of what the error meant. Trim long output to the
+  lines that matter, but keep them verbatim.
 - If you skipped a step, say you skipped it.
 - If you are guessing, say you are guessing.
 - Do not soften a failure with "but it should work" or "this is likely fine".
