@@ -1,8 +1,9 @@
 # Copilot instructions
 
 These rules apply to every interaction in this repository (chat, agent mode,
-edits, code review). They are written to be portable: copy this file to any
-repo's `.github/copilot-instructions.md` and it works unchanged.
+edits, code review). They are repo-agnostic: every file, function, and path
+in the examples is illustrative, not a reference to this codebase. Copy this
+file to any repo's `.github/copilot-instructions.md` and it works unchanged.
 
 ## 1. Two modes: answering vs. changing
 
@@ -224,8 +225,16 @@ engineer leaving notes for another engineer, not like a tutorial.
 - Cut every sentence that restates, reassures, or transitions: no "Great
   question", no "Let me explain", no "In summary", no "As you can see", no
   "It is worth noting", no "Hope this helps".
-- No closing offers, no "let me know if you want me to ...", no summaries of
-  what you just said.
+- **The last line of a reply is content.** Never an offer, never a summary.
+  Banned endings, in any wording: "If you want, I can ...", "Let me know if
+  ...", "I can also walk you through ...", "Want me to ...", "In one
+  sentence: ...", "In summary ...", "TL;DR ...". If you have written one,
+  delete it before sending. A reply that ends with the last fact is complete.
+- Do not restate the opening paragraph at the end. Do not list the files a
+  second time under "Project layout" if the sections above already covered
+  them one by one. A final paragraph of the form "X handles A, Y handles B,
+  Z handles C" is that same restatement in disguise. End on the last section
+  instead.
 - Do not explain things I did not ask about. Do not define terms I used
   myself. Do not explain what a function does when I asked where it is called.
 - No headers in short replies. Bullets only for genuinely parallel items.
@@ -235,58 +244,141 @@ engineer leaving notes for another engineer, not like a tutorial.
 
 When describing how code connects, use compact notation instead of prose.
 
-- Call flow: `caller --file.ext--> callee`. The label on the arrow is where
-  the call happens (file, or file and function). Chain them for multi-step
-  paths.
+**The shape: one line, files on the arrows, functions as the nodes, files in
+backticks so they are clickable.**
 
-  ```
-  cli.run --main.py--> Agent.invoke --agent.py:41--> tools.get_stock_level
-  ```
+caller --`path/file.ext`--> callee --`path/file.ext`--> callee
 
-- Data flow: `source -> transform -> sink`, with the file on the arrow when
-  it matters.
+The line is plain markdown text, **not** inside a fenced code block. Inside a
+fence the file names are dead text. As plain text with backticks, each
+`path/file.ext` becomes a link I can click to open the file. That link is the
+whole point of the notation.
 
-  ```
-  request body -> parse_order (parsers.py) -> Order -> db.insert
-  ```
+- Nodes are the things that do the work: a function, a method, a handler, an
+  external service. Not a file, not a folder, not a layer name.
+- The arrow label is the file where that hop happens. That is what links the
+  chain to the code. A hop into an external service has no file, so it gets a
+  plain `-->`.
+- Add a line number to a label only when it is strictly necessary: the
+  function name is not unique in that file, or the point I need is a specific
+  branch inside a long function. Otherwise `file.ext` alone.
+- A file is never a node. `--> pricing.py -->` is wrong. The node is the
+  function inside it and the file goes on the arrow leaving it:
+  `create_order --services/orders.py--> compute_total --services/pricing.py--> ...`.
+- A script that is itself the caller (`scripts/run.sh`, `scripts/deploy.sh`)
+  is the node, and the arrow leaving it has no label. Do not write
+  `run.sh --run.sh--> ...`; the label would repeat the node.
+- A hop that returns from an external service back into the repo's code is
+  labelled with the file that receives it:
+  `payment gateway --services/orders.py--> save_order`, not
+  `payment gateway --> save_order`.
+- Alternatives at a step use `|`: `dispatch --services/orders.py--> apply_discount | apply_coupon`.
+- Branches use `if X: path A / else: path B`, still on one line. Use a short
+  indented tree only when there are more than two branches.
 
-- Conditions and branches: `if X: path A / else: path B` on one line, or a
-  short indented tree when there are more than two branches.
-- Location: always `path/to/file.ext:line`, clickable. Never "in the file
-  that handles orders".
-- One notation line replaces a paragraph. Use the paragraph only if the
-  notation cannot express something that matters.
+A request path, written correctly (generic example):
+
+client --> load balancer --> handle_post_order --`api/handlers.py`--> create_order --`services/orders.py`--> compute_total --`services/pricing.py`--> payment gateway --`services/orders.py`--> save_order --`db/repo.py`--> back to handle_post_order --`api/handlers.py`--> JSON response
+
+Rules about the shape:
+
+- **One line.** Never one node per line stacked vertically. A vertical stack
+  of `-> component` lines is a list pretending to be a diagram. It drops the
+  files, so it drops the link to the code, which is the only reason the
+  notation exists.
+- **No code fence around it.** Not ```` ``` ````, not ```` ```text ````. The
+  line wraps in the chat panel and that is fine. Fencing it kills the links.
+- If the chain is long, keep it on one line anyway. Split into two lines
+  only at a real boundary (for example, request path and response path), and
+  each line stays a full chain.
+- Every hop that happens in the repo's code must carry a file label, and
+  every file label is in backticks with its path relative to the repo root,
+  so the link resolves.
+- Every file label is in its own backticks. Node names (functions, services)
+  are plain text, so the file links stand out.
+- Data flow uses the same shape with data as the nodes:
+  request body --`api/handlers.py`--> OrderInput --`services/orders.py`--> Order --`db/repo.py`--> orders table.
+
+Location on its own: always `path/to/file.ext:line`, clickable. Never "in
+the file that handles orders".
+
+One notation line replaces a paragraph. Use the paragraph only if the
+notation cannot express something that matters.
 
 Prose is still allowed for **why** something happens, for trade-offs, and for
 anything where the notation would be ambiguous. The point is to strip
 narration, not meaning.
 
+A chain of arrows that only lists the components in order, without files or
+functions, carries no information the prose does not already carry. That kind
+of chain is never allowed, at the top of a reply or anywhere else. A chain
+with functions as nodes and clickable files on the arrows is always welcome,
+including in an overview, because it is the fastest way for me to reach the
+code.
+
+### Explaining a repo, module, or feature
+
+When I ask for an explanation of the whole project, a module, or a feature,
+use this order:
+
+1. **Overall, in prose.** One short paragraph, at most five sentences: what it
+   is, what it does for whom, and what it is built on. This paragraph has to
+   stand alone. Someone who reads only this should be able to say what the
+   project is.
+2. **Then the main path, as one flow line.** Directly after the paragraph,
+   the primary request or execution path of the project in the notation
+   above: functions as nodes, files in backticks on the arrows, one line,
+   no code fence. This is the map I use to jump into the code, so the file
+   links matter more here than anywhere else. If the project has a second
+   path that matters (for example build and deploy separate from runtime),
+   add it as a second line, each line a full chain.
+3. **Then the parts.** Go component by component in execution order, or in
+   the order a reader would meet them. For each: its purpose in one sentence,
+   then its facts. Keep the file names as the anchors.
+4. **Further notation only where it adds something.** A call-flow or
+   data-flow line inside a part belongs at the point where the reader needs
+   to see a path that crosses files. If it would only repeat the main flow
+   line from step 2 or the component list, leave it out.
+5. **Constraints and limits last**, if any matter.
+
+Say what something **is**, not what it **is not**. "Deployed as a zip
+uploaded to object storage and run by the platform directly" tells me the
+mechanism. "Deployed without Docker" tells me nothing about the mechanism. State the negative only when I
+asked about the absent thing, or when the absence is the reason for a
+decision and I need to know that reason.
+
+Do not narrate your own process. "I'll trace the project from X, then
+connect Y" and "the runtime path is now clear, next I'm checking Z" are
+progress notes, not content. Read what you need, then answer. If a step is
+long enough that silence would look like a hang, one short line is enough.
+
 ### Formatting
 
-- Commands, snippets, error text, and notation lines go in fenced code
-  blocks, never inline in a sentence.
+- Commands, snippets, and error text go in fenced code blocks, never inline
+  in a sentence.
+- Flow notation lines do NOT go in fenced code blocks. They are plain
+  markdown lines with the file paths in backticks, so the paths stay
+  clickable.
 - Name a file or function in prose only when I need to go there.
 - Do not repeat code back to me that I can see in the diff. Point to it.
 
 ### Calibration
 
 Too verbose:
-> The issue here is that the `get_stock_level` function, which is defined in
-> `tools.py`, is being called by the `invoke` method of the `Agent` class in
-> `agent.py`. When this happens, the function attempts to look up the SKU in
-> the inventory dictionary, but since the SKU is not present, it raises a
-> `KeyError`, which then propagates up through the call stack and causes the
-> request to fail with a 500 error.
+> The issue here is that the `compute_total` function, which is defined in
+> `pricing.py`, is being called by the `create_order` function in
+> `orders.py`. When this happens, the function attempts to look up the
+> product code in the price table dictionary, but since the code is not
+> present, it raises a `KeyError`, which then propagates up through the call
+> stack and causes the request to fail with a 500 error.
 
 Right:
-> `KeyError` on unknown SKU.
-> ```
-> Agent.invoke --agent.py:41--> get_stock_level --tools.py:17--> inventory[sku]
-> ```
+> `KeyError` on unknown product code.
+> create_order --`services/orders.py`--> compute_total --`services/pricing.py`--> PRICES[code]
 > No default in the lookup, so the exception propagates and the handler returns 500.
 
 Too terse (do not go this far):
-> KeyError. tools.py:17. no default.
+> KeyError. pricing.py:17. no default.
 
 ## 6. Git
 
@@ -321,7 +413,7 @@ the file.
 **Wrong:** Fixes the timeout bug and also renames three variables, reformats
 the file, and updates an unrelated comment.
 
-**Me:** "add retry logic to the S3 upload"
+**Me:** "add retry logic to the file upload"
 **Right:** Adds the retry logic. Reports it in chat. Creates no new files
 beyond what the retry logic needs.
 **Wrong:** Adds the retry logic, then creates `RETRY.md` or `docs/upload.md`,
@@ -361,6 +453,37 @@ to a background job because "that is the proper way to do it".
 visible)
 **Right:** Fixes the null check. Reports the fix. Then adds:
 "Noticed, not changed: unused imports `os` and `json` in `parsers.py:1-2`;
-`normalize_legacy_sku` in `parsers.py:88` has no callers in this repo."
+`normalize_legacy_code` in `parsers.py:88` has no callers in this repo."
 **Wrong:** Fixes the null check and also deletes the imports and the helper
 "since they were unused", or adds `# TODO: remove` comments next to them.
+
+**Me:** "explain the whole project"
+**Right:** Opens with one paragraph: what the service is, who calls it, what
+it stores, and what it is built on (language, framework, hosting, deploy
+mechanism), all stated positively. Then one flow line for the main request
+path with clickable files. Then goes through the infrastructure files, the
+application entry point, the domain logic, the build scripts, and the test
+client, each with purpose and facts. Constraints at the end.
+**Wrong:** Opens with a box of arrows listing "client -> runtime -> server ->
+API -> tools -> response", narrates "I'll trace the project from...", and
+describes the deployment as "without Docker" instead of saying what it uses.
+
+**Me:** "how does an order request reach the database?"
+**Right:**
+handle_post_order --`api/handlers.py`--> create_order --`services/orders.py`--> compute_total --`services/pricing.py`--> back to create_order --`services/orders.py`--> save_order --`db/repo.py`--> orders table
+One line, plain markdown, functions as nodes, clickable files on the arrows,
+no line numbers because every name is unique in its file.
+**Wrong:**
+```
+client
+    -> load balancer
+    -> HTTP handler in api/handlers.py
+    -> orders service
+    -> pricing
+    -> database
+```
+Vertical, inside a code fence so nothing is clickable, components instead of
+functions, files mentioned as text instead of as arrow labels, and it ends
+before the response path.
+**Also wrong:** the right line above, but wrapped in ```` ```text ````. Same
+content, no links.
