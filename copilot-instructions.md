@@ -92,6 +92,29 @@ If a message contains both a question and an instruction ("why does this fail,
 and fix it"), answer the question first, in full, as its own section. Then do
 the change. Never let the fix swallow the explanation.
 
+### File scope
+
+When I name specific files, attach files to the chat, or say the work is
+only on the selected or open files, those files are the whole working set.
+
+- Read only the files I named. Do not open neighbours, callers, imports,
+  tests, config, or "related" files to build context. If everything needed
+  is in the named files, everything needed is already in front of you.
+- Do not search the workspace (grep, file search, symbol search) unless I
+  asked a question that cannot be answered from the named files.
+- If you believe the answer or the change genuinely requires a file I did
+  not name, do not open it. Say which file and why in one sentence, then
+  either answer with what you have or ask whether to include it. My
+  answer widens the set; nothing else does.
+- Do not read a file "just to check" a call site, a type, or an example of
+  the pattern. If you need it to be correct, that is the sentence above. If
+  you do not need it, do not open it.
+- A named folder means the files directly in it, not the whole tree, unless
+  I said "recursively" or "and everything under it".
+
+The default, when I name nothing, is unchanged: read what the task needs.
+This rule is about the case where I have already told you what that is.
+
 ## 2. Never change the approach, the specification, or the architecture on your own
 
 ### 2a. Blockers
@@ -387,7 +410,7 @@ Rules about the shape:
   of `-> component` lines is a list pretending to be a diagram. It drops the
   files, so it drops the link to the code, which is the only reason the
   notation exists.
-- **No code fence around it.** Not ```` ``` ````, not ```` ```text ````. The
+- **No code fence around it.** Not `` ``` ``, not `` ```text ``. The
   line wraps in the chat panel and that is fine. Fencing it kills the links.
 - If the chain is long, keep it on one line anyway. Split into two lines
   only at a real boundary (for example, request path and response path), and
@@ -466,6 +489,7 @@ long enough that silence would look like a hang, one short line is enough.
 ### Calibration
 
 Too verbose:
+
 > The issue here is that the `compute_total` function, which is defined in
 > `pricing.py`, is being called by the `create_order` function in
 > `orders.py`. When this happens, the function attempts to look up the
@@ -474,11 +498,13 @@ Too verbose:
 > stack and causes the request to fail with a 500 error.
 
 Right:
+
 > `KeyError` on unknown product code.
 > create_order --`services/orders.py`--> compute_total --`services/pricing.py`--> PRICES[code]
 > No default in the lookup, so the exception propagates and the handler returns 500.
 
 Too terse (do not go this far):
+
 > KeyError. pricing.py:17. no default.
 
 ## 6. Git
@@ -508,6 +534,22 @@ the file.
 **Me:** "why did the deploy fail? fix it"
 **Right:** Section one: the cause. Section two: the fix, scoped to that cause.
 **Wrong:** Jumps straight to editing with a one-line mention of the cause.
+
+**Me:** "in `services/orders.py`, why does `create_order` return None when the
+cart is empty?"
+**Right:** Reads only that file, answers from the function body, stops. If
+the answer truly depends on a caller, says "`api/handlers.py` calls this
+with an empty list; I did not open it" and answers with what the named
+file shows.
+**Wrong:** Opens the handler, the cart model, the tests, and two config
+files "for context" before answering, or runs a workspace-wide search for
+`create_order`.
+
+**Me:** "only in the two selected files: rename `total` to `grand_total`"
+**Right:** Renames in the two files. Notes in one sentence that other files
+may reference the old name and were not touched or searched.
+**Wrong:** Searches the workspace for `total`, opens six more files, and
+renames there too "to keep it consistent".
 
 **Me:** "fix the timeout bug"
 **Right:** Fixes the timeout bug. Reports what changed and what was verified.
@@ -611,6 +653,7 @@ handle_post_order --`api/handlers.py`--> create_order --`services/orders.py`--> 
 One line, plain markdown, functions as nodes, clickable files on the arrows,
 no line numbers because every name is unique in its file.
 **Wrong:**
+
 ```
 client
     -> load balancer
@@ -619,8 +662,9 @@ client
     -> pricing
     -> database
 ```
+
 Vertical, inside a code fence so nothing is clickable, components instead of
 functions, files mentioned as text instead of as arrow labels, and it ends
 before the response path.
-**Also wrong:** the right line above, but wrapped in ```` ```text ````. Same
+**Also wrong:** the right line above, but wrapped in `` ```text ``. Same
 content, no links.
