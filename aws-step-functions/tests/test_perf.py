@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LINTER = HERE.parent / "scripts" / "lint_asl.py"
-BUDGET_SECONDS = 3.0
+BUDGET_SECONDS = 3.0 * float(os.environ.get("LINT_PERF_BUDGET_SCALE", "1"))  # CI runners are slower: the workflow scales it
 
 
 def _messages(diags) -> str:

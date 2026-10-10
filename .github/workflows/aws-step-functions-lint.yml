@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # shared CI runners are 1.5-2x slower than a dev machine; tests/test_perf.py multiplies its 3 s budget by this
+  LINT_PERF_BUDGET_SCALE: "2"
+
 jobs:
   stdlib:
     name: ${{ matrix.os }} / Python ${{ matrix.python }}

@@ -745,10 +745,19 @@ BIG_INT_PROBLEM = ("the JSON contains an integer with thousands of digits (more 
                    "a float (infinity) so the rest could be linted - no ASL field accepts such a number, shorten it")
 
 
+MAX_INT_DIGITS = 4300  # Python's default int-digit limit; applied on every version so results don't depend on it
+LONG_INT_RE = re.compile(r"\d{%d}" % (MAX_INT_DIGITS + 1))
+_big_ints_seen: list = []
+
+
 def _parse_big_int(s: str) -> Any:
+    if len(s.lstrip("-")) > MAX_INT_DIGITS:
+        _big_ints_seen.append(True)
+        return float(s)
     try:
         return int(s)
     except ValueError:  # more digits than sys.get_int_max_str_digits() (Python 3.11+)
+        _big_ints_seen.append(True)
         return float(s)
 
 
@@ -772,12 +781,15 @@ def json_loads(text: str, problems: Optional[list] = None) -> Any:
     read as a float and BIG_INT_PROBLEM is added to `problems` instead of crashing. Raises JSONDecodeError as usual.
     Objects with duplicate keys come back as DupKeyDict (reported by S024)."""
     try:
+        if LONG_INT_RE.search(text):  # same result on Pythons without the int-digit limit (before 3.9.14 / 3.10.7)
+            raise ValueError("integer longer than the int-digit limit")
         return json.loads(text, object_pairs_hook=_object_pairs)
     except json.JSONDecodeError:
         raise
     except ValueError:
+        _big_ints_seen.clear()
         obj = json.loads(text, parse_int=_parse_big_int, object_pairs_hook=_object_pairs)
-        if problems is not None and BIG_INT_PROBLEM not in problems:
+        if _big_ints_seen and problems is not None and BIG_INT_PROBLEM not in problems:
             problems.append(BIG_INT_PROBLEM)
         return obj
 
@@ -1174,7 +1186,10 @@ def _extract_definitions(text: str, filename: Optional[str], problems: list) -> 
         if directives:
             note = f"{note}; Terraform %{{ }} directives: only the first (if) branch of each %{{ if }} was linted"
     yaml_error = None
-    if err is not None and not jsonish and yaml_candidate(text, filename):
+    # a JSON DefinitionString inside YAML is found by extract_embedded with exact file lines, with or without
+    # PyYAML; PyYAML is only needed when there is a YAML-native Definition mapping (or nothing else was found)
+    if (err is not None and not jsonish and yaml_candidate(text, filename)
+            and (YAML_NATIVE_DEFINITION_RE.search(text) or not extract_embedded(text)[0])):
         loaded, yaml_error = load_yaml_template(text)
         if loaded is not None:  # parsed with PyYAML: handled exactly like a JSON template from here on
             direct, err, note = loaded, None, YAML_NOTE
@@ -1554,6 +1569,10 @@ def load_yaml():
         return yaml
     except Exception:  # noqa: BLE001 - any import problem means "not available"
         return None
+
+
+# "Definition:" / "DefinitionBody:" (CloudFormation, SAM) or "definition:" (Serverless) with a mapping below it
+YAML_NATIVE_DEFINITION_RE = re.compile(r"^[ 	]*(?:Definition|DefinitionBody|definition)[ 	]*:[ 	]*(?:#.*)?$", re.M)
 
 
 def yaml_candidate(text: str, filename: Optional[str]) -> bool:
