@@ -1778,7 +1778,7 @@ def walk_keys(obj: Any, fn, skip_keys: list[str], prefix: str = "") -> None:
 def collect_expressions(st: dict) -> list[tuple[str, str, bool, bool]]:
     """Every {% %} candidate in a state: (field path, raw string, result allowed, errorOutput allowed)."""
     out: list[tuple[str, str, bool, bool]] = []
-    stype = st.get("Type")
+    stype = st.get("Type") if isinstance(st.get("Type"), str) else None  # a non-string Type is S009
     skip = {"ItemProcessor", "Iterator", "Branches", "Retry", "Type", "Comment", "Resource", "Next", "Default", "End",
             "QueryLanguage", "ProcessorConfig", "ReaderConfig", "WriterConfig", "Label"}
 
@@ -2045,7 +2045,7 @@ def closest_name(name: str, options) -> Optional[str]:
 
 def check_states_refs(st: dict, loc: str, diags: Diagnostics) -> None:
     """J013: $states.<field> and $states.context.<path> must exist, and Map.Item / Task.Token must be used where set."""
-    stype = st.get("Type")
+    stype = st.get("Type") if isinstance(st.get("Type"), str) else None  # a non-string Type is S009
     res = st.get("Resource")
     wait_token = stype == "Task" and isinstance(res, str) and res.endswith(".waitForTaskToken")
     for field_path, raw, _result_ok, _error_ok in collect_expressions(st):
@@ -4497,7 +4497,7 @@ def check_literal_sizes(st: dict, loc: str, diags: Diagnostics) -> None:
     """S039: a literal field that alone exceeds the 256 KiB state input/output quota (service-quotas.html)."""
     for f in ("Output", "Assign", "Arguments", "Parameters", "Result", "ItemSelector", "ResultSelector"):
         if f in st:
-            size = len(json.dumps(st[f], ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            size = len(json.dumps(st[f], ensure_ascii=False, separators=(",", ":")).encode("utf-8", "surrogatepass"))
             if size > MAX_PAYLOAD:
                 diags.warn("S039", f"{loc}/{f}", f"{f} is {size} bytes of literal JSON, more than the 256 KiB (262144 bytes) a state can pass; "
                            "the execution fails with States.DataLimitExceeded - store the data in S3 (or DynamoDB) and pass a reference")
@@ -4515,7 +4515,7 @@ def check_states_part_b(states: Any, start_at: Any, base: str, top_lang: str, di
         if big:
             check_literal_sizes(st, loc, diags)
         integ = integration_of(st.get("Resource")) if st.get("Type") == "Task" else None
-        if st.get("Type") in RETRY_CATCH_ALLOWED:
+        if isinstance(st.get("Type"), str) and st["Type"] in RETRY_CATCH_ALLOWED:  # a non-string Type is S009
             check_error_matchers(st, loc, integ, diags)
         if integ is not None:
             check_task_integration(st, loc, is_jsonata, integ, diags)
@@ -4554,7 +4554,7 @@ def check_part_b(definition: dict, diags: Diagnostics) -> None:
                     f'got {json.dumps(definition["Version"])}')  # statemachine-structure.html
     if "Comment" in definition and not isinstance(definition["Comment"], str):
         diags.error("S038", "/Comment", 'Comment must be a string, e.g. "Comment": "what this state machine does"')
-    size = len(json.dumps(definition, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    size = len(json.dumps(definition, ensure_ascii=False, separators=(",", ":")).encode("utf-8", "surrogatepass"))
     if size > MAX_DEFINITION:
         diags.error("S039", "/", f"the definition is {size} bytes, more than the 1 MB (1048576 bytes) quota for a state machine definition; "
                     "move large literals to S3/DynamoDB or split the workflow into child state machines")

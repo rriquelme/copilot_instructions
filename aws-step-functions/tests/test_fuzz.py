@@ -148,11 +148,26 @@ def crash_key(e: BaseException) -> str:
 
 
 def try_lint(lint, text: str, mode: str):
+    """The exception lint_text raised, or the one its safety net caught inside lint_definition (reported to the user
+    as "linter internal error", exit 3: still a crash), or None."""
+    caught: list = []
+    orig = lint.lint_definition
+
+    def spy(*args, **kwargs):
+        try:
+            return orig(*args, **kwargs)
+        except (Exception, RecursionError) as e:  # noqa: BLE001 - recorded, then re-raised to the safety net
+            caught.append(e)
+            raise
+
+    lint.lint_definition = spy
     try:
         lint.lint_text(text, None, mode)
-        return None
     except Exception as e:  # noqa: BLE001 - any exception is a bug
         return e
+    finally:
+        lint.lint_definition = orig
+    return caught[0] if caught else None
 
 
 def shrink(lint, d, mode: str, key: str):
