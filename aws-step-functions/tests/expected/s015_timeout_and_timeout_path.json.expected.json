@@ -1,5 +1,5 @@
 {"type": "STANDARD", "diagnostics": [
-  ["ERROR", "S015", "/States/Approve/HeartbeatSecondsPath"],
-  ["ERROR", "S015", "/States/Approve/TimeoutSecondsPath"],
+  ["ERROR", "S050", "/States/Approve/HeartbeatSecondsPath"],
+  ["ERROR", "S050", "/States/Approve/TimeoutSecondsPath"],
   ["INFO", "J000", "/QueryLanguage"]
 ]}

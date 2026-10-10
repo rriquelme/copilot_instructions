@@ -1,0 +1,14 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "End": true
+    }
+  },
+  "startat": "A",
+  "Timeout": 60,
+  "TimeoutSeconds": 0
+}

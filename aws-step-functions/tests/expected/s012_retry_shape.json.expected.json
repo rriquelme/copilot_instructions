@@ -1,0 +1,10 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S012", "/States/A/Retry/0/BackoffRate"],
+  ["ERROR", "S012", "/States/A/Retry/0/IntervalSeconds"],
+  ["ERROR", "S012", "/States/A/Retry/0/JitterStrategy"],
+  ["ERROR", "S012", "/States/A/Retry/0/MaxAttempt"],
+  ["ERROR", "S012", "/States/A/Retry/1"],
+  ["ERROR", "S012", "/States/A/Retry/2/Interval"],
+  ["ERROR", "S012", "/States/A/Retry/2/MaxAttempts"],
+  ["ERROR", "S012", "/States/B/Retry"]
+]}

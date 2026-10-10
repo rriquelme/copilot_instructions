@@ -1,0 +1,20 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Map",
+      "ItemProcessor": {
+        "StartAt": "X",
+        "States": {
+          "X": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S013", "/States/B"],
+  ["INFO", "J000", "/QueryLanguage"],
+  ["WARNING", "S045", "/States/A/Iterator"]
+]}

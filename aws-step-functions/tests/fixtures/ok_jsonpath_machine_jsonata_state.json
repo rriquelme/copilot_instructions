@@ -1,0 +1,34 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONPath",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Parameters": {
+        "x.$": "$.x"
+      },
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Pass",
+      "QueryLanguage": "JSONata",
+      "Output": "{% $states.input %}",
+      "Next": "C"
+    },
+    "C": {
+      "Type": "Map",
+      "ItemsPath": "$.items",
+      "ItemProcessor": {
+        "StartAt": "X",
+        "States": {
+          "X": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

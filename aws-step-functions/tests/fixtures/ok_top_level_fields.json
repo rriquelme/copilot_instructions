@@ -1,0 +1,14 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Wait",
+      "Seconds": 0,
+      "End": true
+    }
+  },
+  "Version": "1.0",
+  "TimeoutSeconds": 3600
+}

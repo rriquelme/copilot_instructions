@@ -7,7 +7,7 @@
   ["ERROR", "S011", "/States/Bad/Cause"],
   ["ERROR", "S011", "/States/Bad/Error"],
   ["ERROR", "S013", "/States/Map/ItemProcessor/ProcessorConfig"],
-  ["ERROR", "S015", "/States/Wait/HeartbeatSeconds"],
-  ["ERROR", "S015", "/States/Wait/TimeoutSeconds"],
+  ["ERROR", "S050", "/States/Wait/HeartbeatSeconds"],
+  ["ERROR", "S050", "/States/Wait/TimeoutSeconds"],
   ["INFO", "J000", "/QueryLanguage"]
 ]}

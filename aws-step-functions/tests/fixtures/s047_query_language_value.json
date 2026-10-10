@@ -1,0 +1,11 @@
+{
+  "QueryLanguage": "jsonata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "QueryLanguage": "JSONPATH",
+      "End": true
+    }
+  }
+}
