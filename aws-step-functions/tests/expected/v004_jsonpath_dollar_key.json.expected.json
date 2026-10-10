@@ -1,4 +1,4 @@
 {"type": "STANDARD", "diagnostics": [
-  ["ERROR", "V004", "/States/Each/ItemProcessor/States"],
-  ["INFO", "J000", "/QueryLanguage"]
+  ["INFO", "J000", "/QueryLanguage"],
+  ["WARNING", "V004", "/States/Each/ItemProcessor/States"]
 ]}

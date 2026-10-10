@@ -2023,8 +2023,8 @@ def check_variable_reads(used: set[str], loc: str, *, in_vars: set[str], ever_as
                         hint = f' (the Assign key "{bad[0]}" is not a valid name; rename it to "{v}" as V007 says)'
             diags.error("V001", loc, f"${v} is never assigned anywhere in the state machine{hint}")
         else:
-            diags.error("V002", loc, f"${v} is not assigned on every path that reaches this state (assigned later, in this "
-                        "same state, inside a Map/Parallel scope, or only on some branches)")
+            diags.error("V002", loc, f"${v} is not assigned on any path that reaches this state (it is only assigned later, "
+                        "or in this same state, whose Assign is not visible to its own fields); assign it before this state")
 
 
 # $states.* fields and the Step Functions context object. None = single value, "*" = free-form JSON below.
@@ -2605,7 +2605,9 @@ class Scope:
         for v in sorted(self.scope_assigned):
             self.all_assigned.setdefault(v, self.location)
             if v in self.outer_assigned:
-                d.error("V004", self.location, f'variable "{v}" is assigned both in this scope and in an enclosing scope; inner scopes cannot reuse outer variable names')
+                d.warn("V004", self.location, f'variable "{v}" is assigned both in this scope and in an enclosing scope; the AWS docs say '
+                       "inner scopes cannot reuse outer variable names (not rejected when the state machine is created); "
+                       "rename the inner variable")
 
         for name in self.names:
             self.analyse_state(name)
@@ -3391,55 +3393,34 @@ class Scope:
 
     # -- definite assignment dataflow ---------------------------------------
     def dataflow(self, entry: set[str]) -> dict[str, Optional[set[str]]]:
-        """IN[s] = intersection over incoming edges of (IN[pred] | gen(edge)). None = not yet reached."""
+        """IN[s] = variables assigned on at least one path that reaches s: entry at StartAt, union over incoming edges
+        of (IN[pred] | gen(edge)). None = not reached. A read is only an error (V002) when no arriving path assigns
+        the variable; "assigned on some branches only" is not reported (Step Functions does not reject it)."""
         IN: dict[str, Optional[set[str]]] = {n: None for n in self.names}
         if not isinstance(self.start_at, str) or self.start_at not in self.name_set:
             return IN
         IN[self.start_at] = set(entry)
-        # IN only shrinks from "unreached" (None = everything), so any evaluation order reaches the same greatest
-        # fixpoint. Worklist in reverse postorder from StartAt: one pass for an acyclic flow, whatever the
-        # order of the States object; each re-evaluation only reads the state's own incoming edges.
-        incoming: dict[str, list[tuple[str, set[str]]]] = {}
-        succ: dict[str, list[str]] = {}
+        succ: dict[str, list[tuple[str, set[str]]]] = {}
         for frm, to, gen, _via in self.edges:
-            incoming.setdefault(to, []).append((frm, gen))
-            succ.setdefault(frm, []).append(to)
-        post: list[str] = []
-        seen = {self.start_at}
-        dfs = [(self.start_at, iter(succ.get(self.start_at, ())))]
-        while dfs:
-            n, it = dfs[-1]
-            for t in it:
-                if t not in seen:
-                    seen.add(t)
-                    dfs.append((t, iter(succ.get(t, ()))))
-                    break
-            else:
-                dfs.pop()
-                post.append(n)
-        import heapq
-        rank = {n: k for k, n in enumerate(reversed(post))}
-        heap = sorted(rank[t] for t in set(succ.get(self.start_at, ())) if t != self.start_at)
-        queued = set(heap)
-        order = list(reversed(post))
-        while heap:
-            k = heapq.heappop(heap)
-            queued.discard(k)
-            n = order[k]
-            acc: Optional[set[str]] = None
-            for frm, gen in incoming.get(n, ()):
-                if IN[frm] is None:
+            succ.setdefault(frm, []).append((to, gen))
+        # IN only grows and is bounded by the assigned names, so the worklist reaches the least fixpoint
+        work = [self.start_at]
+        queued = {self.start_at}
+        while work:
+            n = work.pop()
+            queued.discard(n)
+            cur = IN[n]
+            for t, gen in succ.get(n, ()):
+                if t not in IN:
                     continue
-                # sets in IN are never modified in place, so a state without Assign can share its predecessor's set
-                out = IN[frm] | gen if gen else IN[frm]  # type: ignore[operator]
-                acc = out if acc is None else (acc & out)
-            if acc is None or IN[n] is acc or IN[n] == acc:
-                continue
-            IN[n] = acc
-            for t in succ.get(n, ()):
-                if t != self.start_at and rank[t] not in queued:
-                    queued.add(rank[t])
-                    heapq.heappush(heap, rank[t])
+                out = cur | gen if gen else cur  # type: ignore[operator]
+                old = IN[t]
+                if old is not None and out <= old:
+                    continue
+                IN[t] = out if old is None else (old | out)  # sets are never modified in place: sharing is safe
+                if t not in queued:
+                    queued.add(t)
+                    work.append(t)
         return IN
 
     def finish(self, entry: set[str], outer_for_distributed: Optional[set[str]]) -> None:
@@ -5021,16 +5002,18 @@ CODES: dict[str, tuple[str, str, str]] = {
     "V001": ("ERROR", "variable never assigned",
              "The variable is read but no Assign sets it (the message may suggest the intended name). "
              'Before: "{% $orderID %}" with "Assign": {"orderId": ...}  After: "{% $orderId %}"'),
-    "V002": ("ERROR", "variable not assigned on every path / not visible here",
-             "Assign it on every path that reaches this state (e.g. in the first state), and remember that variables assigned "
-             'inside a Map/Parallel are not visible outside. Before: only one Choice branch assigns $total  After: "Assign": '
+    "V002": ("ERROR", "variable not assigned on any path to this state / not visible here",
+             "No path that reaches this state assigns the variable: it is only assigned later, in this same state, or inside "
+             "a Map/Parallel (not visible outside). Assign it in a state before this one. A variable assigned on at least one "
+             'arriving branch is not reported. Before: Read uses $total, assigned only in the later state Sum  After: "Assign": '
              '{"total": 0} in the first state'),
     "V003": ("ERROR", "outer variable read in a Distributed Map",
              "Distributed Map child workflows cannot see outer variables; pass them in through ItemSelector. "
              'Before: "{% $limit %}" inside the Map  After: "ItemSelector": {"limit": "{% $limit %}", "item": '
              '"{% $states.context.Map.Item.Value %}"} and read $states.input.limit'),
-    "V004": ("ERROR", "variable shadows an outer variable",
-             "A Map/Parallel scope cannot assign a variable that an enclosing scope also assigns; rename the inner one. "
+    "V004": ("WARNING", "variable shadows an outer variable",
+             "The AWS docs say a Map/Parallel scope cannot assign a variable that an enclosing scope also assigns (the "
+             "definition is still accepted at creation); rename the inner one. "
              'Before: inner "Assign": {"total": ...}  After: inner "Assign": {"itemTotal": ...}'),
     "V005": ("WARNING", "Pass state only assigns variables",
              "Fold the Assign into the previous state (or the matching Choices rule) and delete the Pass state. "

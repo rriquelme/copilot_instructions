@@ -167,9 +167,9 @@ WARNING must be fixed or justified, in every family.**
   wrapping, unknown functions, argument counts, bad operators,
   `$states.*`/`$states.context.*` fields and placement, syntax. ERRORs, plus
   WARNINGs for likely mistakes; `J000` is the INFO that a machine is JSONPath.
-- `V0xx` variables: never assigned, not on every path, wrong scope,
-  shadowing, invalid `Assign` names (ERRORs); Pass-only-assign, never read
-  (WARNINGs).
+- `V0xx` variables: never assigned, not assigned on any arriving path, wrong scope,
+  invalid `Assign` names (ERRORs); shadowing an outer variable, Pass-only-assign,
+  never read (WARNINGs).
 - `P0xx` practice and JSONPath correctness: `P001` (Lambda `Payload`) is an
   INFO; `P002` (callback without timeout), `P003` (`States.Runtime` retried)
   and `P005` (Lambda task without the transient-error Retry) are WARNINGs;

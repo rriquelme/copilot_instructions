@@ -6,6 +6,5 @@
   ["ERROR", "J001", "/States/PathChoice/Choices/0/Output"],
   ["ERROR", "J001", "/States/PathChoice/Choices/1/Condition"],
   ["ERROR", "J001", "/States/PathChoice/Choices/1/Condition"],
-  ["ERROR", "S006", "/States/PathChoice/Choices/1"],
-  ["ERROR", "V002", "/States/AtaChoice/Choices/0/Condition"]
+  ["ERROR", "S006", "/States/PathChoice/Choices/1"]
 ]}
