@@ -139,6 +139,16 @@ def main() -> int:
         check("template still invalid after removing directives -> WARNING 'could not lint this template', exit 2",
               code == 2 and "WARNING S000" in out and "could not lint this template" in out and "ERROR" not in out, out)
 
+    # S039 definition size quota (1 MB); a fixture this large would bloat tests/fixtures
+    with tempfile.TemporaryDirectory() as tmp:
+        states = {f"P{i}": {"Type": "Pass", "Output": {"blob": "x" * 200_000}, "Next": f"P{i + 1}"} for i in range(6)}
+        states["P6"] = {"Type": "Succeed"}
+        big = json.dumps({"QueryLanguage": "JSONata", "StartAt": "P0", "States": states})
+        (Path(tmp) / "big.json").write_text(big, encoding="utf-8")
+        code, out = run(["big.json"], cwd=tmp)
+        check("definition over 1 MB -> ERROR S039 at /, no per-field WARNING for 200 KB literals, exit 1",
+              code == 1 and "ERROR   S039 /:" in out and "WARNING S039" not in out, out)
+
     # internal-error safety net (in-process: force lint_definition to crash)
     spec = importlib.util.spec_from_file_location("lint_asl_cli_test", LINTER)
     mod = importlib.util.module_from_spec(spec)
