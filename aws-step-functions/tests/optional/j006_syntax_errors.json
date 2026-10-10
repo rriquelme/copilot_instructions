@@ -1,0 +1,16 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Shape",
+  "States": {
+    "Shape": {
+      "Type": "Pass",
+      "Output": {
+        "danglingOperator": "{% $states.input.a + %}",
+        "unclosedParen": "{% ($states.input.a * 2 %}",
+        "unclosedArray": "{% [1, 2, $states.input.a %}",
+        "missingComma": "{% $sum([1 2]) %}"
+      },
+      "End": true
+    }
+  }
+}

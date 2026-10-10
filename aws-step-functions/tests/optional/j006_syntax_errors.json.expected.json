@@ -1,0 +1,6 @@
+{"requires": ["jsonata"], "type": "STANDARD", "diagnostics": [
+  ["ERROR", "J006", "/States/Shape/Output/danglingOperator"],
+  ["ERROR", "J006", "/States/Shape/Output/missingComma"],
+  ["ERROR", "J006", "/States/Shape/Output/unclosedArray"],
+  ["ERROR", "J006", "/States/Shape/Output/unclosedParen"]
+]}
