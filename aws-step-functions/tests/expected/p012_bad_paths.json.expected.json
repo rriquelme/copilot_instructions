@@ -12,6 +12,9 @@
   ["ERROR", "P012", "/States/T/Parameters/z.$"],
   ["ERROR", "P012", "/States/T/ResultPath"],
   ["ERROR", "P012", "/States/W/SecondsPath"],
+  ["ERROR", "S031", "/States/T/Parameters/x.$"],
+  ["ERROR", "S031", "/States/T/Parameters/y.$"],
+  ["ERROR", "S031", "/States/T/Parameters/z.$"],
   ["INFO", "J000", "/QueryLanguage"],
   ["INFO", "P005", "/States/T"]
 ]}
