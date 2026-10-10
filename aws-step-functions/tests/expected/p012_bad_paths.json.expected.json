@@ -16,5 +16,5 @@
   ["ERROR", "S031", "/States/T/Parameters/y.$"],
   ["ERROR", "S031", "/States/T/Parameters/z.$"],
   ["INFO", "J000", "/QueryLanguage"],
-  ["INFO", "P005", "/States/T"]
+  ["WARNING", "P005", "/States/T"]
 ]}

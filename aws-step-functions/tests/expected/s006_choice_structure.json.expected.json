@@ -4,5 +4,5 @@
   ["ERROR", "S006", "/States/Rules/Choices/1"],
   ["ERROR", "S006", "/States/Rules/Choices/2"],
   ["ERROR", "S006", "/States/Rules/Choices/3/Varible"],
-  ["WARNING", "S006", "/States/Rules"]
+  ["WARNING", "S049", "/States/Rules"]
 ]}

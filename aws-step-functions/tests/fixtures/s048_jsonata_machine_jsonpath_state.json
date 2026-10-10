@@ -1,0 +1,20 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "QueryLanguage": "JSONPath",
+      "Parameters": {
+        "x.$": "$.x"
+      },
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Pass",
+      "QueryLanguage": "JSONata",
+      "End": true
+    }
+  }
+}

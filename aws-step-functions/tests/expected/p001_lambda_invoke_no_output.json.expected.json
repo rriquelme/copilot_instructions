@@ -1,4 +1,4 @@
 {"type": "STANDARD", "diagnostics": [
   ["INFO", "P001", "/States/Call"],
-  ["INFO", "P005", "/States/Call"]
+  ["WARNING", "P005", "/States/Call"]
 ]}

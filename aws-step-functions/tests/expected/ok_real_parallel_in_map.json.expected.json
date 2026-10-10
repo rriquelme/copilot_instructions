@@ -1,3 +1,1 @@
-{"type": "STANDARD", "diagnostics": [
-  ["ERROR", "S023", "/States/Enrich each/ItemProcessor/States/Lookups/Branches/0/States/Orders/Resource"]
-]}
+{"type": "STANDARD", "diagnostics": []}

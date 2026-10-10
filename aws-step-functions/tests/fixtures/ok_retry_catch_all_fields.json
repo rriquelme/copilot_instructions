@@ -1,0 +1,69 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": "m"
+      },
+      "TimeoutSeconds": 30,
+      "Retry": [
+        {
+          "Comment": "transient",
+          "ErrorEquals": [
+            "States.Timeout",
+            "States.Http.StatusCode.503"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 0,
+          "BackoffRate": 1.5,
+          "MaxDelaySeconds": 30,
+          "JitterStrategy": "NONE"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "MaxAttempts": 2
+        }
+      ],
+      "Catch": [
+        {
+          "Comment": "c",
+          "ErrorEquals": [
+            "States.DataLimitExceeded",
+            "MyError"
+          ],
+          "Next": "Report",
+          "Assign": {
+            "err": "{% $states.errorOutput %}"
+          },
+          "Output": "{% $states.input %}"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Done"
+        }
+      ],
+      "HeartbeatSeconds": 10,
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed",
+      "Output": {
+        "input": "{% $states.input %}"
+      }
+    },
+    "Report": {
+      "Type": "Fail",
+      "Error": "Failed",
+      "Cause": "{% $string($err) %}"
+    }
+  }
+}

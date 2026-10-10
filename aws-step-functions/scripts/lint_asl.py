@@ -390,9 +390,11 @@ PAGINATION_RE = re.compile(r"token|marker|cursor|next_?page|last_?evaluated_?key
 LAMBDA_TRANSIENT_ERRORS = {"Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException",
                            "Lambda.TooManyRequestsException", "Lambda.ClientExecutionTimeoutException",
                            "States.ALL", "States.TaskFailed"}
-LAMBDA_RETRY_SNIPPET = ('{"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", '
-                        '"Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2, '
-                        '"JitterStrategy": "FULL"}')
+# Same retrier as reference/patterns.md: the AWS best-practice list plus throttling, with jitter.
+# https://docs.aws.amazon.com/step-functions/latest/dg/sfn-best-practices.html#bp-lambda-serviceexception
+LAMBDA_RETRY_SNIPPET = ('{"ErrorEquals": ["Lambda.ClientExecutionTimeoutException", "Lambda.ServiceException", '
+                        '"Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"], '
+                        '"IntervalSeconds": 2, "MaxAttempts": 6, "BackoffRate": 2, "JitterStrategy": "FULL"}')
 
 # ---------------------------------------------------------------------------
 # Diagnostics
@@ -1707,23 +1709,44 @@ def suggest_field(k: str, allowed: set[str]) -> str:
     return f' (did you mean "{best[1]}"?)' if best and best[0] <= 2 else ""
 
 
+def unknown_field_message(what: str, k: str, allowed) -> str:
+    """'unknown <what> "k" (did you mean "X"?); rename it to "X"' or '...; remove it (allowed: ...)' - one message
+    shape for every unknown-field diagnostic in the core checks."""
+    dym = suggest_field(k, set(allowed))
+    if dym:
+        return f'unknown {what} "{k}"{dym}; rename it to "{dym.split(chr(34))[1]}"'
+    names = sorted(allowed)
+    listed = f" (allowed: {', '.join(names)})" if len(names) <= 12 else ""
+    return f'unknown {what} "{k}"; remove it{listed}'
+
+
 def check_error_equals(ee: Any, loc: str, is_last: bool, diags: Diagnostics) -> None:
     if not isinstance(ee, list) or not ee:
-        diags.error("S012", f"{loc}/ErrorEquals", "ErrorEquals must be a non-empty array of error names")
+        diags.error("S041", f"{loc}/ErrorEquals", 'ErrorEquals must be a non-empty array of error names; list the errors '
+                    'to handle (e.g. "ErrorEquals": ["States.TaskFailed"])')
         return
     for e in ee:
         if not isinstance(e, str):
-            diags.error("S012", f"{loc}/ErrorEquals", "error names must be strings")
+            diags.error("S041", f"{loc}/ErrorEquals", f"error names must be strings, got {json.dumps(e)[:30]}; quote each "
+                        'name (e.g. "ErrorEquals": ["States.Timeout", "MyCustomError"])')
             continue
         if e.startswith("States.") and e not in ERROR_NAMES and not any(p.match(e) for p in ERROR_NAME_PATTERNS):
-            extra = (" - HTTP Task status errors need a three-digit code, one entry per code (e.g. \"States.Http.StatusCode.503\")"
-                     if e.startswith("States.Http.StatusCode.") else "")
-            diags.error("S012", f"{loc}/ErrorEquals", f'"{e}" is not a predefined States.* error name{extra}')
+            dym = "" if e.startswith("States.Http.StatusCode.") else suggest_field(e, ERROR_NAMES)
+            if e.startswith("States.Http.StatusCode."):
+                fix = 'HTTP Task status errors need a three-digit code, one entry per code (e.g. "States.Http.StatusCode.503")'
+            elif dym:
+                fix = f'rename it to "{dym.split(chr(34))[1]}"'
+            else:
+                fix = ('use a predefined name (e.g. "States.TaskFailed", "States.Timeout") or a custom error name without '
+                       'the "States." prefix (e.g. "PaymentDeclined")')
+            diags.error("S041", f"{loc}/ErrorEquals", f'"{e}" is not a predefined States.* error name{dym}; {fix}')
     if "States.ALL" in ee:
         if len(ee) > 1:
-            diags.error("S012", f"{loc}/ErrorEquals", "States.ALL must appear alone in ErrorEquals")
+            diags.error("S041", f"{loc}/ErrorEquals", 'States.ALL must appear alone in ErrorEquals; use "ErrorEquals": '
+                        '["States.ALL"] and move the other names to their own entry before this one')
         if not is_last:
-            diags.error("S012", f"{loc}/ErrorEquals", "the retrier/catcher with States.ALL must be the last one in the array")
+            diags.error("S041", f"{loc}/ErrorEquals", "the retrier/catcher with States.ALL must be the last one in the array; "
+                        "move this entry to the end of the array (specific errors first, States.ALL last)")
 
 
 def walk_keys(obj: Any, fn, skip_keys: list[str], prefix: str = "") -> None:
@@ -2081,7 +2104,7 @@ def check_assign_names(st: dict, loc: str, diags: Diagnostics) -> None:
     for path, assign in targets:
         if not isinstance(assign, dict):
             if (path != "Assign" or "Assign" in st) and not is_placeholder(assign):
-                diags.error("S009", f"{loc}/{path}", 'Assign must be an object mapping variable names to values, e.g. "Assign": {"count": 0}')
+                diags.error("S009", f"{loc}/{path}", 'Assign must be an object mapping variable names to values; e.g. "Assign": {"count": 0}')
             continue
         taken = {k[:-2] if k.endswith(".$") else k for k in assign}
         next_suffix: dict[str, int] = {}  # base name -> next suffix to try, so N colliding keys cost O(N), not O(N^2)
@@ -2491,7 +2514,8 @@ class Scope:
     def target(self, frm: str, field: str, to: Any, gen: set[str], via: str) -> None:
         loc = f"{self.location}/{frm}/{field}"
         if not isinstance(to, str) or not to:
-            self.diags.error("S002", loc, f"{field} must be a state name string")
+            self.diags.error("S002", loc, f"{field} must be a state name string, got {json.dumps(to)[:40]}; set it to the name "
+                             f'of a state in this States block (e.g. "{field.rsplit("/", 1)[-1]}": "NextStep")')
             return
         if to not in self.name_set and is_placeholder(to):
             self.tpl_target = True  # template placeholder: the real target is unknown, so S002/S003 can't judge it
@@ -2500,7 +2524,8 @@ class Scope:
             elsewhere = ""
             if to in self.all_names:
                 elsewhere = f' ("{to}" exists at {self.all_names[to]}, but transitions cannot cross Map/Parallel scope boundaries)'
-            self.diags.error("S002", loc, f'{field} targets "{to}", which is not a state in this scope{elsewhere}')
+            self.diags.error("S002", loc, f'{field} targets "{to}", which is not a state in this scope{elsewhere}; point it at '
+                             f'a state of this States block, or add a state named "{to}" here')
             return
         self.edges.append((frm, to, gen, via))
         self.preds[to].append((frm, via))
@@ -2511,15 +2536,23 @@ class Scope:
         for name in self.names:
             loc = f"{self.location}/{name}"
             if len(name) > 80:
-                d.error("S008", loc, "state name longer than 80 characters")
+                d.error("S008", loc, f"state name is {len(name)} characters, longer than the 80-character limit; rename it to at "
+                        "most 80 characters and update every StartAt/Next/Default/Catch.Next that names it")
             if name in self.all_names:
-                d.error("S007", loc, f'state name "{name}" already used at {self.all_names[name]}; names must be unique across the whole state machine')
+                d.error("S007", loc, f'state name "{name}" already used at {self.all_names[name]}; names must be unique across the '
+                        f'whole state machine (Map and Parallel bodies included), so rename one (e.g. "{name[:70]} 2") and update '
+                        "the transitions that target it")
             else:
                 self.all_names[name] = loc
         if self.start_at is not None and not isinstance(self.start_at, str):
-            d.error("S001", f"{re.sub(r'/States$', '', self.location)}/StartAt", 'StartAt must be a state name string, e.g. "StartAt": "FirstState"')
+            d.error("S001", f"{re.sub(r'/States$', '', self.location)}/StartAt", f'StartAt must be a state name string, got '
+                    f'{json.dumps(self.start_at)[:30]}; e.g. "StartAt": "FirstState"')
         elif self.start_at is not None and self.start_at not in self.names:
-            d.error("S001", f"{re.sub(r'/States$', '', self.location)}/StartAt", f'StartAt "{self.start_at}" is not a state in this scope')
+            dym = closest_name(self.start_at, self.names) if len(self.names) <= 2000 else None
+            d.error("S001", f"{re.sub(r'/States$', '', self.location)}/StartAt", f'StartAt "{self.start_at}" is not a state in this '
+                    + (f'scope (did you mean "{dym}"?); set "StartAt": "{dym}"' if dym else
+                       f'scope; set StartAt to the name of the first state of this States block'
+                       + (f' (e.g. "StartAt": {json.dumps(self.names[0])})' if self.names else "")))
 
         for st in self.states.values():
             if not isinstance(st, dict):
@@ -2554,7 +2587,8 @@ class Scope:
                         stack.append(to)
         for name in self.names:
             if name not in self.reachable and not is_placeholder(name) and not getattr(self, "tpl_target", False):
-                d.error("S003", f"{self.location}/{name}", f'state "{name}" is unreachable: nothing transitions to it (orphan)')
+                d.error("S003", f"{self.location}/{name}", f'state "{name}" is unreachable: nothing transitions to it (orphan); '
+                        "point a Next, Default or Catch Next of a reachable state at it, or delete it")
         self.check_termination()
 
     # -- termination / loop checks (S016, S017, S018) ---------------------------
@@ -2843,18 +2877,25 @@ class Scope:
         st = self.states[name]
         loc = f"{self.location}/{name}"
         if not isinstance(st, dict):
-            d.error("S009", loc, "state must be a JSON object")
+            d.error("S009", loc, f'state must be a JSON object, got {json.dumps(st)[:40]}; e.g. {json.dumps(name)}: {{"Type": "Pass", "End": true}}')
             return
         stype = st.get("Type")
         if stype not in STATE_TYPES:
-            d.error("S009", f"{loc}/Type", f"unknown state Type {json.dumps(stype)}")
+            dym = suggest_field(stype, set(STATE_TYPES)) if isinstance(stype, str) else ""
+            d.error("S009", f"{loc}/Type", (f"unknown state Type {json.dumps(stype)}{dym}; " + (f'use "Type": "{dym.split(chr(34))[1]}"' if dym
+                    else f"set Type to one of {', '.join(STATE_TYPES)}")) if "Type" in st else
+                    f'state has no Type; add one of {", ".join(STATE_TYPES)} (e.g. "Type": "Pass")')
             return
 
         lang = st.get("QueryLanguage", self.top_lang)
         if "QueryLanguage" in st and st["QueryLanguage"] not in ("JSONPath", "JSONata"):
-            d.error("S000", f"{loc}/QueryLanguage", 'QueryLanguage must be "JSONPath" or "JSONata"')
+            d.error("S047", f"{loc}/QueryLanguage", f'QueryLanguage must be "JSONPath" or "JSONata", got {json.dumps(st["QueryLanguage"])[:40]}; '
+                    'use "QueryLanguage": "JSONata" (or remove it to inherit the top-level value)')
         if self.top_lang == "JSONata" and st.get("QueryLanguage") == "JSONPath":
-            d.error("J000", f"{loc}/QueryLanguage", "a JSONata state machine cannot contain JSONPath states (the reverse is allowed)")
+            d.error("S048", f"{loc}/QueryLanguage", 'a JSONata state machine cannot contain JSONPath states (the reverse is allowed); '
+                    'remove "QueryLanguage": "JSONPath" from this state and rewrite its fields in JSONata (e.g. "Parameters" -> '
+                    '"Arguments"), or set the top-level "QueryLanguage": "JSONPath" and mark only the JSONata states with '
+                    '"QueryLanguage": "JSONata"')
         self.state_langs[name] = lang
         is_jsonata = lang == "JSONata"
         spec = FIELDS[stype]
@@ -2868,20 +2909,22 @@ class Scope:
                 other = "JSONPath" if is_jsonata else "JSONata"
                 d.error("J001", f"{loc}/{k}", f'field "{k}" is {other}-only but this state uses {lang}{jsonata_replacement(k, stype) if is_jsonata else ""}')
             elif k == "Assign" and stype not in ASSIGN_ALLOWED:
-                d.error("S009", f"{loc}/Assign", f"{stype} states do not support Assign")
+                d.error("S009", f"{loc}/Assign", f"{stype} states do not support Assign; remove it and assign the variables in "
+                        "the state that transitions here (or in the Catch that leads here)")
             elif k in ("Retry", "Catch") and stype not in RETRY_CATCH_ALLOWED:
-                d.error("S014", f"{loc}/{k}", f"{k} is only allowed on Task, Map and Parallel states")
+                d.error("S014", f"{loc}/{k}", f'{k} is only allowed on Task, Map and Parallel states; remove "{k}" from this {stype} state')
             elif k == "Output" and stype == "Fail":
-                d.error("S009", f"{loc}/Output", "Fail states do not support Output")
+                d.error("S009", f"{loc}/Output", 'Fail states do not support Output; remove it and describe the failure with "Error" '
+                        'and "Cause" (e.g. "Error": "OrderFailed", "Cause": "payment declined")')
             elif k in ("Next", "End") and (stype == "Choice" or stype in TERMINAL_TYPES):
                 extra = " (Next belongs inside each Choices rule, or in Default)" if stype == "Choice" else ""
-                d.error("S004", f"{loc}/{k}", f"{stype} states must not have {k}{extra}")
+                d.error("S004", f"{loc}/{k}", f'{stype} states must not have {k}; remove "{k}"{extra}')
             else:
-                d.error("S009", f"{loc}/{k}", f'unknown field "{k}" for a {stype} state{suggest_field(k, allowed)}')
+                d.error("S009", f"{loc}/{k}", unknown_field_message(f"{stype} state field", k, allowed))
 
         for k in ("Parameters", "ResultSelector", "ItemSelector", "Arguments"):
             if k in st and not isinstance(st[k], dict) and not is_expression(st[k]) and not is_placeholder(st[k]) and k in allowed:
-                d.error("S009", f"{loc}/{k}", f'{k} must be a JSON object, e.g. "{k}": {{"key": "value"}}'
+                d.error("S009", f"{loc}/{k}", f'{k} must be a JSON object, got {json.dumps(st[k])[:30]}; e.g. "{k}": {{"key": "value"}}'
                         + (' (or a "{% %}" expression)' if is_jsonata else ""))
         if is_jsonata:
             def dollar_keys(key_path: str, key: str, _v: Any) -> None:
@@ -2894,23 +2937,26 @@ class Scope:
         has_next, has_end = "Next" in st, "End" in st
         if stype != "Choice" and stype not in TERMINAL_TYPES:
             if has_next and has_end:
-                d.error("S005", loc, "state has both Next and End; use exactly one")
+                d.error("S005", loc, 'state has both Next and End; keep exactly one: "Next": "<state>" to continue, or "End": true to finish here')
             if not has_next and not has_end:
-                d.error("S004", loc, f'{stype} state needs either "Next" or "End": true')
+                d.error("S004", loc, f'{stype} state has neither "Next" nor "End"; add "Next": "<following state>" or "End": true')
             if has_end and st["End"] is not True:
-                d.error("S004", f"{loc}/End", "End must be the boolean true")
+                d.error("S004", f"{loc}/End", f'End must be the boolean true, got {json.dumps(st["End"])[:30]}; write "End": true, or '
+                        'remove End and add "Next": "<state>"')
             if has_next:
                 self.target(name, "Next", st["Next"], assign_keys(st.get("Assign")), "Next")
 
         if stype == "Choice":
             choices = st.get("Choices")
+            rule_ex = ("{\"Condition\": \"{% $states.input.status = 'DONE' %}\", \"Next\": \"Done\"}" if is_jsonata
+                       else '{"Variable": "$.status", "StringEquals": "DONE", "Next": "Done"}')
             if not isinstance(choices, list) or not choices:
-                d.error("S006", f"{loc}/Choices", "Choice needs a non-empty Choices array")
+                d.error("S006", f"{loc}/Choices", f'Choice needs a non-empty Choices array; add at least one rule, e.g. "Choices": [{rule_ex}]')
             else:
                 for i, rule in enumerate(choices):
                     rloc = f"{loc}/Choices/{i}"
                     if not isinstance(rule, dict):
-                        d.error("S006", rloc, "rule must be an object")
+                        d.error("S006", rloc, f"Choices rule must be an object, got {json.dumps(rule)[:30]}; e.g. {rule_ex}")
                         continue
                     rule_allowed = CHOICE_RULE_FIELDS["jsonata" if is_jsonata else "jsonpath"]
                     rule_other = CHOICE_RULE_FIELDS["jsonpath" if is_jsonata else "jsonata"]
@@ -2932,22 +2978,25 @@ class Scope:
                                 fix = "replace Variable + comparison operators with one \"Condition\", e.g. \"Condition\": \"{% $states.input.status = 'DONE' %}\""
                             d.error("J001", f"{rloc}/{k}", f'rule field "{k}" is {"JSONPath" if is_jsonata else "JSONata"}-only; {fix}')
                         else:
-                            d.error("S006", f"{rloc}/{k}", f'unknown Choice rule field "{k}"')
+                            d.error("S006", f"{rloc}/{k}", unknown_field_message("Choice rule field", k, rule_allowed))
                     if "Next" not in rule:
-                        d.error("S006", rloc, "Choice rule is missing Next")
+                        d.error("S006", rloc, 'Choice rule is missing Next; add "Next": "<state to run when this rule matches>"')
                     else:
                         self.target(name, f"Choices/{i}/Next", rule["Next"], assign_keys(rule.get("Assign")), "Choice")
                     if is_jsonata:
                         if "Condition" not in rule:
-                            d.error("S006", rloc, 'JSONata Choice rule needs "Condition": "{% <boolean expression> %}"')
+                            d.error("S006", rloc, 'JSONata Choice rule has no Condition; add "Condition": "{% <boolean expression> %}" '
+                                    "(e.g. \"Condition\": \"{% $states.input.status = 'DONE' %}\")")
                         elif not is_expression(rule["Condition"]) and not is_placeholder(rule["Condition"]):
                             d.error("J012", f"{rloc}/Condition", 'Condition must be a JSONata expression string "{% ... %}" that evaluates to true or false')
                     elif "Variable" not in rule and not any(k in rule for k in ("And", "Or", "Not")):
-                        d.error("S006", rloc, "JSONPath Choice rule needs Variable + comparison, or And/Or/Not")
+                        d.error("S006", rloc, 'JSONPath Choice rule has no Variable and no And/Or/Not; add "Variable" plus one '
+                                'comparison operator (e.g. {"Variable": "$.status", "StringEquals": "DONE", "Next": "Done"})')
                     if not is_jsonata:
                         check_jsonpath_rule(rule, rloc, False, d)
             if "Default" not in st:
-                d.warn("S006", loc, "Choice has no Default; if no rule matches the execution fails with States.NoChoiceMatched")
+                d.warn("S049", loc, 'Choice has no Default, so the execution fails with States.NoChoiceMatched when no rule matches; '
+                       'add "Default": "<state to run when no rule matches>"')
             else:
                 self.target(name, "Default", st["Default"], assign_keys(st.get("Assign")), "Default")
 
@@ -2955,33 +3004,41 @@ class Scope:
             present = [f for f in ("Seconds", "Timestamp", "SecondsPath", "TimestampPath") if f in st]
             if len(present) != 1:
                 opts = "Seconds, Timestamp" + ("" if is_jsonata else ", SecondsPath, TimestampPath")
-                d.error("S010", loc, f"Wait needs exactly one of {opts} (found: {', '.join(present) or 'none'})")
+                d.error("S010", loc, f"Wait needs exactly one of {opts} (found: {', '.join(present) or 'none'}); keep exactly one, "
+                        'e.g. "Seconds": 30')
             if "Seconds" in st and not is_expression(st["Seconds"]) and not is_placeholder(st["Seconds"]) and not (is_int(st["Seconds"]) and st["Seconds"] >= 0):
-                d.error("S010", f"{loc}/Seconds", 'Seconds must be a non-negative integer or a "{% %}" expression evaluating to one')
+                d.error("S010", f"{loc}/Seconds", f'Seconds must be a non-negative integer, got {json.dumps(st["Seconds"])[:30]}; '
+                        'e.g. "Seconds": 30' + (' or "Seconds": "{% $delay %}"' if is_jsonata else ' (or "SecondsPath": "$.delay")'))
             if "Timestamp" in st and not is_expression(st["Timestamp"]) and not is_placeholder(st["Timestamp"]) and not RFC3339_RE.match(str(st["Timestamp"])):
-                d.error("S010", f"{loc}/Timestamp", 'Timestamp must be RFC3339 with an uppercase T and an uppercase Z or a numeric offset '
-                        '(e.g. 2025-01-31T10:00:00Z or 2025-01-31T10:00:00+05:30) or a "{% %}" expression producing one')
+                d.error("S010", f"{loc}/Timestamp", 'Timestamp must be RFC3339 with an uppercase T and an uppercase Z or a numeric offset; '
+                        'e.g. "Timestamp": "2025-01-31T10:00:00Z" or "2025-01-31T10:00:00+05:30"'
+                        + (' (or a "{% %}" expression producing one)' if is_jsonata else ""))
 
         if stype == "Fail":
             if "Error" in st and "ErrorPath" in st:
-                d.error("S011", loc, "Fail cannot have both Error and ErrorPath")
+                d.error("S011", loc, "Fail cannot have both Error and ErrorPath; keep only one of them")
             if "Cause" in st and "CausePath" in st:
-                d.error("S011", loc, "Fail cannot have both Cause and CausePath")
+                d.error("S011", loc, "Fail cannot have both Cause and CausePath; keep only one of them")
             for k in ("Error", "Cause", "ErrorPath", "CausePath"):
                 if k in st and not isinstance(st[k], str):
-                    d.error("S011", f"{loc}/{k}", f'{k} must be a string, e.g. "{k}": ' + ('"$.error"' if k.endswith("Path") else '"OrderFailed"'))
+                    d.error("S011", f"{loc}/{k}", f'{k} must be a string, got {json.dumps(st[k])[:30]}; e.g. "{k}": '
+                            + ('"$.error"' if k.endswith("Path") else '"OrderFailed"'))
 
         if stype == "Task":
             res = st.get("Resource")
             if not isinstance(res, str) or not res:
-                d.error("S015", f"{loc}/Resource", "Task needs a constant string Resource")
+                d.error("S015", f"{loc}/Resource", 'Task has no Resource (or it is not a non-empty string); add the integration ARN, '
+                        'e.g. "Resource": "arn:aws:states:::lambda:invoke"')
             else:
                 if is_expression(res):
-                    d.error("S015", f"{loc}/Resource", "Resource must be a constant string, not a JSONata expression")
+                    d.error("S015", f"{loc}/Resource", "Resource must be a constant string, not a JSONata expression; write the ARN "
+                            'literally and pass the dynamic part in Arguments (e.g. "Resource": "arn:aws:states:::lambda:invoke", '
+                            '"Arguments": {"FunctionName": "{% $functionArn %}"})')
                 if res == "arn:aws:states:::lambda:invoke" and is_jsonata:
                     args = st.get("Arguments")
                     if not is_expression(args) and (not isinstance(args, dict) or "FunctionName" not in args):
-                        d.error("S015", f"{loc}/Arguments", "lambda:invoke needs Arguments.FunctionName (and usually Arguments.Payload)")
+                        d.error("S015", f"{loc}/Arguments", 'lambda:invoke has no Arguments.FunctionName; add it, e.g. "Arguments": '
+                                '{"FunctionName": "arn:aws:lambda:<region>:<account>:function:<name>", "Payload": "{% $states.input %}"}')
                     out_str = json.dumps(st.get("Output", "")) + json.dumps(st.get("Assign", ""))
                     if "Output" not in st and "$states.result.Payload" not in out_str:
                         d.info("P001", loc, 'lambda:invoke returns {ExecutedVersion, Payload, StatusCode}; most workflows want "Output": "{% $states.result.Payload %}"')
@@ -2995,15 +3052,19 @@ class Scope:
             if not is_jsonata:
                 for f in ("TimeoutSeconds", "HeartbeatSeconds"):
                     if f in st and f + "Path" in st:
-                        d.error("S015", f"{loc}/{f}Path", f"a Task state cannot include both {f} and {f}Path; keep only one of them")
+                        d.error("S050", f"{loc}/{f}Path", f"a Task state cannot include both {f} and {f}Path; keep only one of them")
             ts = st.get("TimeoutSeconds")
             if "TimeoutSeconds" in st and not is_expression(ts) and not is_placeholder(ts) and not (is_int(ts) and ts > 0):
-                d.error("S015", f"{loc}/TimeoutSeconds", 'TimeoutSeconds must be a positive integer or a "{% %}" expression')
+                d.error("S050", f"{loc}/TimeoutSeconds", f'TimeoutSeconds must be a positive integer, got {json.dumps(ts)[:30]}; '
+                        'e.g. "TimeoutSeconds": 300' + (' or "{% $timeout %}"' if is_jsonata else ' (or "TimeoutSecondsPath": "$.timeout")'))
             hb = st.get("HeartbeatSeconds")
             if "HeartbeatSeconds" in st and not is_expression(hb) and not is_placeholder(hb) and not (is_int(hb) and hb > 0):
-                d.error("S015", f"{loc}/HeartbeatSeconds", 'HeartbeatSeconds must be a positive integer or a "{% %}" expression')
+                d.error("S050", f"{loc}/HeartbeatSeconds", f'HeartbeatSeconds must be a positive integer, got {json.dumps(hb)[:30]}; '
+                        'e.g. "HeartbeatSeconds": 60' + (' or "{% $heartbeat %}"' if is_jsonata else ' (or "HeartbeatSecondsPath": "$.heartbeat")'))
             if is_int(hb) and is_int(ts) and hb >= ts:
-                d.error("S015", f"{loc}/HeartbeatSeconds", "HeartbeatSeconds must be smaller than TimeoutSeconds")
+                d.error("S050", f"{loc}/HeartbeatSeconds", f"HeartbeatSeconds ({hb}) must be smaller than TimeoutSeconds ({ts}); "
+                        + (f'lower it (e.g. "HeartbeatSeconds": {ts // 2}) or raise TimeoutSeconds' if ts >= 2 else
+                           f'raise TimeoutSeconds (e.g. "TimeoutSeconds": {hb * 2})'))
             if isinstance(res, str) and res and not is_expression(res):
                 check_task_resource(res, f"{loc}/Resource", d)
                 nres = RESOURCE_PLACEHOLDER_RE.sub("__TPL__", res)
@@ -3013,29 +3074,34 @@ class Scope:
                         isinstance(r, dict) and isinstance(r.get("ErrorEquals"), list) and LAMBDA_TRANSIENT_ERRORS & set(
                             e for e in r["ErrorEquals"] if isinstance(e, str)) for r in rl)
                     if not covered and (rl is None or isinstance(rl, list)):
-                        d.info("P005", loc, "Lambda tasks should retry transient Lambda service errors; add this as the first "
-                               f'"Retry" entry: {LAMBDA_RETRY_SNIPPET}')
+                        d.warn("P005", loc, "Lambda task has no Retry for transient Lambda service errors (throttling, 5xx), so one "
+                               f'blip fails the state; add this as the first "Retry" entry: {LAMBDA_RETRY_SNIPPET}')
 
         retry = st.get("Retry")
         if isinstance(retry, list):
             for i, r in enumerate(retry):
                 rloc = f"{loc}/Retry/{i}"
                 if not isinstance(r, dict):
-                    d.error("S012", rloc, "retrier must be an object")
+                    d.error("S012", rloc, f'Retry entry must be an object, got {json.dumps(r)[:30]}; e.g. '
+                            '{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2}')
                     continue
                 for k in r:
                     if k not in RETRY_FIELDS:
-                        d.error("S012", f"{rloc}/{k}", f'unknown Retry field "{k}"')
+                        d.error("S012", f"{rloc}/{k}", unknown_field_message("Retry field", k, RETRY_FIELDS))
                 check_error_equals(r.get("ErrorEquals"), rloc, i == len(retry) - 1, d)
                 if "MaxAttempts" in r and not is_placeholder(r["MaxAttempts"]) and not (is_int(r["MaxAttempts"]) and r["MaxAttempts"] >= 0):
-                    d.error("S012", f"{rloc}/MaxAttempts", "MaxAttempts must be a non-negative integer")
+                    d.error("S012", f"{rloc}/MaxAttempts", f'MaxAttempts must be a non-negative integer (0 = never retry), got '
+                            f'{json.dumps(r["MaxAttempts"])[:30]}; e.g. "MaxAttempts": 3')
                 if "IntervalSeconds" in r and not is_placeholder(r["IntervalSeconds"]) and not (is_int(r["IntervalSeconds"]) and r["IntervalSeconds"] > 0):
-                    d.error("S012", f"{rloc}/IntervalSeconds", "IntervalSeconds must be a positive integer")
+                    d.error("S012", f"{rloc}/IntervalSeconds", f'IntervalSeconds must be a positive integer, got '
+                            f'{json.dumps(r["IntervalSeconds"])[:30]}; e.g. "IntervalSeconds": 2')
                 br = r.get("BackoffRate")
                 if "BackoffRate" in r and not is_placeholder(br) and not (isinstance(br, (int, float)) and not isinstance(br, bool) and br >= 1):
-                    d.error("S012", f"{rloc}/BackoffRate", "BackoffRate must be a number >= 1.0")
+                    d.error("S012", f"{rloc}/BackoffRate", f'BackoffRate must be a number >= 1.0, got {json.dumps(br)[:30]}; '
+                            'e.g. "BackoffRate": 2')
                 if "JitterStrategy" in r and r["JitterStrategy"] not in ("FULL", "NONE") and not is_placeholder(r["JitterStrategy"]):
-                    d.error("S012", f"{rloc}/JitterStrategy", 'JitterStrategy must be "FULL" or "NONE"')
+                    d.error("S012", f"{rloc}/JitterStrategy", f'JitterStrategy must be "FULL" or "NONE", got '
+                            f'{json.dumps(r["JitterStrategy"])[:30]}; e.g. "JitterStrategy": "FULL"')
                 ee = r.get("ErrorEquals")
                 # Only States.Runtime: AWS docs say States.DataLimitExceeded CAN be retried/caught when named explicitly.
                 for term in ("States.Runtime",):
@@ -3051,14 +3117,16 @@ class Scope:
                         d.warn("P004", f"{rloc}/MaxDelaySeconds", "MaxDelaySeconds caps an exponential backoff, but BackoffRate is "
                                '1.0 so the interval never grows; set "BackoffRate": 2 or remove MaxDelaySeconds')
         elif "Retry" in st and not is_placeholder(retry):
-            d.error("S012", f"{loc}/Retry", 'Retry must be an array of retriers, e.g. "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 3}]')
+            d.error("S012", f"{loc}/Retry", 'Retry must be an array of retriers; wrap the entries in [ ], e.g. "Retry": '
+                    '[{"ErrorEquals": ["States.ALL"], "MaxAttempts": 3}]')
 
         catch = st.get("Catch")
         if isinstance(catch, list):
             for i, c in enumerate(catch):
                 cloc = f"{loc}/Catch/{i}"
                 if not isinstance(c, dict):
-                    d.error("S012", cloc, "catcher must be an object")
+                    d.error("S040", cloc, f'Catch entry must be an object, got {json.dumps(c)[:30]}; e.g. '
+                            '{"ErrorEquals": ["States.ALL"], "Next": "HandleError"}')
                     continue
                 allowed_c = set(CATCH_FIELDS["both"]) | set(CATCH_FIELDS["jsonata" if is_jsonata else "jsonpath"])
                 for k in c:
@@ -3069,48 +3137,62 @@ class Scope:
                     elif k == "Output" and not is_jsonata:
                         d.error("J001", f"{cloc}/Output", "Catch.Output is JSONata-only; in JSONPath use ResultPath")
                     else:
-                        d.error("S012", f"{cloc}/{k}", f'unknown Catch field "{k}"')
+                        d.error("S040", f"{cloc}/{k}", unknown_field_message("Catch field", k, allowed_c))
                 check_error_equals(c.get("ErrorEquals"), cloc, i == len(catch) - 1, d)
                 if "Next" not in c:
-                    d.error("S012", cloc, "Catch needs Next")
+                    d.error("S040", cloc, 'catcher has no Next; add "Next": "<state that handles the error>", e.g. '
+                            '{"ErrorEquals": ["States.ALL"], "Next": "HandleError"}')
                 else:
                     self.target(name, f"Catch/{i}/Next", c["Next"], assign_keys(c.get("Assign")), "Catch")
         elif "Catch" in st and not is_placeholder(catch):
-            d.error("S012", f"{loc}/Catch", 'Catch must be an array of catchers, e.g. "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "HandleError"}]')
+            d.error("S040", f"{loc}/Catch", 'Catch must be an array of catchers; wrap the entries in [ ], e.g. "Catch": '
+                    '[{"ErrorEquals": ["States.ALL"], "Next": "HandleError"}]')
 
         child_outer = self.outer_assigned | self.scope_assigned
 
         if stype == "Map":
             proc = st.get("ItemProcessor", st.get("Iterator"))
-            if "Iterator" in st:
-                d.warn("S013", f"{loc}/Iterator", "Iterator is deprecated; use ItemProcessor")
+            if "Iterator" in st and "ItemProcessor" not in st:  # both: S013 below says which one to delete
+                d.warn("S045", f"{loc}/Iterator", 'Iterator is deprecated; rename "Iterator" to "ItemProcessor" (same StartAt and '
+                       'States inside)')
             if "Iterator" in st and "ItemProcessor" in st:
-                d.error("S013", loc, "Map has both Iterator and ItemProcessor")
+                d.error("S013", loc, 'Map has both Iterator and ItemProcessor; delete "Iterator" (deprecated) and keep "ItemProcessor"')
             if not isinstance(proc, dict):
-                d.error("S013", loc, "Map needs an ItemProcessor with StartAt and States")
+                d.error("S013", loc, 'Map has no ItemProcessor object; add one, e.g. "ItemProcessor": {"ProcessorConfig": '
+                        '{"Mode": "INLINE"}, "StartAt": "Handle item", "States": {"Handle item": {"Type": "Pass", "End": true}}}')
             else:
                 cfg = proc.get("ProcessorConfig") or {}
                 if "ProcessorConfig" in proc and not isinstance(proc["ProcessorConfig"], dict) and not is_placeholder(proc["ProcessorConfig"]):
-                    d.error("S013", f"{loc}/ItemProcessor/ProcessorConfig", 'ProcessorConfig must be an object, e.g. "ProcessorConfig": {"Mode": "INLINE"}')
+                    d.error("S013", f"{loc}/ItemProcessor/ProcessorConfig", f'ProcessorConfig must be an object, got '
+                            f'{json.dumps(proc["ProcessorConfig"])[:30]}; e.g. "ProcessorConfig": {{"Mode": "INLINE"}}')
                 mode = cfg.get("Mode", "INLINE") if isinstance(cfg, dict) else "INLINE"
                 if mode not in ("INLINE", "DISTRIBUTED") and not is_placeholder(mode):
-                    d.error("S013", f"{loc}/ItemProcessor/ProcessorConfig/Mode", "Mode must be INLINE or DISTRIBUTED")
+                    d.error("S013", f"{loc}/ItemProcessor/ProcessorConfig/Mode", f'Mode must be "INLINE" or "DISTRIBUTED", got '
+                            f'{json.dumps(mode)[:30]}; e.g. "ProcessorConfig": {{"Mode": "INLINE"}}')
                 if mode == "DISTRIBUTED" and (not isinstance(cfg, dict) or cfg.get("ExecutionType") not in ("STANDARD", "EXPRESS") and not is_placeholder(cfg.get("ExecutionType"))):
-                    d.error("S013", f"{loc}/ItemProcessor/ProcessorConfig", 'DISTRIBUTED mode requires ExecutionType "STANDARD" or "EXPRESS"')
-                if mode == "INLINE" and any(f in st for f in ("ItemReader", "ResultWriter", "ItemBatcher", "ToleratedFailureCount", "ToleratedFailurePercentage", "Label")):
-                    d.error("S013", loc, 'ItemReader, ResultWriter, ItemBatcher, ToleratedFailure* and Label are only valid with ProcessorConfig.Mode "DISTRIBUTED"')
+                    d.error("S043", f"{loc}/ItemProcessor/ProcessorConfig", 'DISTRIBUTED mode requires ExecutionType "STANDARD" or '
+                            '"EXPRESS"; e.g. "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"}')
+                dist_only = [f for f in ("ItemReader", "ResultWriter", "ItemBatcher", "ToleratedFailureCount", "ToleratedFailurePercentage",
+                                         "Label") if f in st]
+                if mode == "INLINE" and dist_only:
+                    d.error("S043", loc, f'{", ".join(dist_only)} only work in a Distributed Map, but this Map is INLINE; set '
+                            '"ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"} in ItemProcessor, or remove '
+                            f'{", ".join(dist_only)}')
                 if is_jsonata and "Items" not in st and "ItemReader" not in st:
-                    d.info("S013", loc, 'JSONata Map without Items iterates the state input itself; if the state input is not itself the array, set "Items": "{% $states.input.<array> %}"')
+                    d.info("S044", loc, 'JSONata Map without Items iterates the state input itself; if the state input is not itself the array, set "Items": "{% $states.input.<array> %}"')
                 items = st.get("Items")
                 if is_jsonata and "Items" in st and not is_expression(items) and not is_placeholder(items) and not isinstance(items, (list, dict)):
-                    d.error("S013", f"{loc}/Items", 'Items must be a JSON array/object or a "{% %}" expression evaluating to one')
+                    d.error("S013", f"{loc}/Items", f'Items must be a JSON array/object or a "{{% %}}" expression evaluating to one, '
+                            f'got {json.dumps(items)[:30]}; e.g. "Items": "{{% $states.input.items %}}"')
                 if not is_jsonata:
                     for f in ("MaxConcurrency", "ToleratedFailureCount", "ToleratedFailurePercentage"):
                         if f in st and f + "Path" in st:
                             d.error("S013", f"{loc}/{f}Path", f"a Map state cannot include both {f} and {f}Path; keep only one of them")
                 mc = st.get("MaxConcurrency")
                 if mc is not None and not is_expression(mc) and not is_placeholder(mc) and not (is_int(mc) and mc >= 0):
-                    d.error("S013", f"{loc}/MaxConcurrency", 'MaxConcurrency must be a non-negative integer or a "{% %}" expression')
+                    d.error("S013", f"{loc}/MaxConcurrency", f'MaxConcurrency must be a non-negative integer (0 = no limit), got '
+                            f'{json.dumps(mc)[:30]}; e.g. "MaxConcurrency": 10'
+                            + (' or "{% $limit %}"' if is_jsonata else ' (or "MaxConcurrencyPath": "$.limit")'))
                 for k in ("ItemReader", "ResultWriter"):
                     v = st.get(k)
                     if isinstance(v, dict):
@@ -3119,7 +3201,8 @@ class Scope:
                         if not is_jsonata and "Arguments" in v:
                             d.error("J001", f"{loc}/{k}/Arguments", f'{k}.Arguments is JSONata-only; use "Parameters" in JSONPath')
                 if not proc.get("StartAt"):
-                    d.error("S013", f"{loc}/ItemProcessor/StartAt", "ItemProcessor needs StartAt")
+                    d.error("S013", f"{loc}/ItemProcessor/StartAt", 'ItemProcessor has no StartAt; add "StartAt": "<first state in '
+                            'ItemProcessor.States>"')
                 if isinstance(proc.get("States"), dict):
                     child = Scope(states=proc["States"], start_at=proc.get("StartAt"),
                                   location=f"{loc}/{'ItemProcessor' if 'ItemProcessor' in st else 'Iterator'}/States",
@@ -3128,20 +3211,23 @@ class Scope:
                     child.analyse()
                     self.children.append((name, child))
                 else:
-                    d.error("S013", f"{loc}/ItemProcessor/States", "ItemProcessor needs a States object")
+                    d.error("S013", f"{loc}/ItemProcessor/States", 'ItemProcessor has no States object; add the per-item states, e.g. '
+                            '"States": {"Handle item": {"Type": "Pass", "End": true}}')
 
         if stype == "Parallel":
             branches = st.get("Branches")
             if not isinstance(branches, list) or not branches:
-                d.error("S013", f"{loc}/Branches", "Parallel needs a non-empty Branches array")
+                d.error("S042", f"{loc}/Branches", 'Parallel needs a non-empty Branches array; e.g. "Branches": [{"StartAt": "A", '
+                        '"States": {"A": {"Type": "Pass", "End": true}}}]')
             else:
                 for i, b in enumerate(branches):
                     bloc = f"{loc}/Branches/{i}"
                     if not isinstance(b, dict) or not isinstance(b.get("States"), dict):
-                        d.error("S013", bloc, "branch needs StartAt and States")
+                        d.error("S042", bloc, 'Parallel branch must be an object with StartAt and a States object; e.g. '
+                                '{"StartAt": "A", "States": {"A": {"Type": "Pass", "End": true}}}')
                         continue
                     if not b.get("StartAt"):
-                        d.error("S013", f"{bloc}/StartAt", "branch needs StartAt")
+                        d.error("S042", f"{bloc}/StartAt", 'Parallel branch has no StartAt; add "StartAt": "<first state of this branch>"')
                     child = Scope(states=b["States"], start_at=b.get("StartAt"), location=f"{bloc}/States", top_lang=self.top_lang,
                                   diags=d, jsonata=self.jsonata, all_names=self.all_names, all_assigned=self.all_assigned,
                                   outer_assigned=child_outer, distributed=False)
@@ -4393,24 +4479,30 @@ def check_part_b(definition: dict, diags: Diagnostics) -> None:
 # ---------------------------------------------------------------------------
 
 
+TOP_LEVEL_FIELDS = ("Comment", "StartAt", "States", "Version", "TimeoutSeconds", "QueryLanguage")
+
+
 def lint_definition(definition: dict, diags: Diagnostics, jsonata=None, execution_type: str = "STANDARD") -> None:
     check_duplicate_keys(definition, diags)
     definition = clip_depth(definition, diags)
     top_lang = definition.get("QueryLanguage", "JSONPath")
     if top_lang not in ("JSONPath", "JSONata"):
-        diags.error("S000", "/QueryLanguage", f'QueryLanguage must be "JSONPath" or "JSONata", got {json.dumps(top_lang)}')
+        diags.error("S047", "/QueryLanguage", f'QueryLanguage must be "JSONPath" or "JSONata", got {json.dumps(top_lang)[:40]}; '
+                    'use "QueryLanguage": "JSONata"')
     for k in definition:
-        if k not in ("Comment", "StartAt", "States", "Version", "TimeoutSeconds", "QueryLanguage"):
-            diags.error("S000", f"/{k}", f'unknown top-level field "{k}"')
+        if k not in TOP_LEVEL_FIELDS:
+            diags.error("S046", f"/{k}", unknown_field_message("top-level field", k, TOP_LEVEL_FIELDS))
     ts = definition.get("TimeoutSeconds")
     if "TimeoutSeconds" in definition and not is_placeholder(ts) and not (is_int(ts) and ts > 0):
-        diags.error("S000", "/TimeoutSeconds", "top-level TimeoutSeconds must be a positive integer")
+        diags.error("S046", "/TimeoutSeconds", f'top-level TimeoutSeconds must be a positive integer number of seconds, got '
+                    f'{json.dumps(ts)[:30]}; e.g. "TimeoutSeconds": 3600')
     states = definition.get("States")
     if not isinstance(states, dict):
-        diags.error("S001", "/States", "missing States object")
+        diags.error("S001", "/States", 'the definition has no States object; add "States": {"<first state>": {...}}')
         return
     if not definition.get("StartAt"):
-        diags.error("S001", "/StartAt", "missing StartAt")
+        diags.error("S001", "/StartAt", 'the definition has no StartAt; add "StartAt": "<name of the first state>"'
+                    + (f' (e.g. "StartAt": {json.dumps(next(iter(states)))})' if states else ""))
     if top_lang == "JSONPath" and not any(isinstance(s, dict) and s.get("QueryLanguage") == "JSONata" for s in states.values()):
         diags.info("J000", "/QueryLanguage", 'state machine uses JSONPath; new state machines should set "QueryLanguage": "JSONata" at the top level')
 

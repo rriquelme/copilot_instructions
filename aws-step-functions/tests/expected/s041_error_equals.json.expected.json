@@ -1,0 +1,9 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S041", "/States/A/Catch/0/ErrorEquals"],
+  ["ERROR", "S041", "/States/A/Retry/0/ErrorEquals"],
+  ["ERROR", "S041", "/States/A/Retry/1/ErrorEquals"],
+  ["ERROR", "S041", "/States/A/Retry/2/ErrorEquals"],
+  ["ERROR", "S041", "/States/A/Retry/3/ErrorEquals"],
+  ["ERROR", "S041", "/States/A/Retry/4/ErrorEquals"],
+  ["ERROR", "S041", "/States/A/Retry/4/ErrorEquals"]
+]}

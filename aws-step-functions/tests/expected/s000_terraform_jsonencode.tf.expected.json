@@ -1,6 +1,6 @@
 {"type": "STANDARD", "diagnostics": [
   ["ERROR", "S002", "/States/A/Next"],
   ["INFO", "P001", "/States/A"],
-  ["INFO", "P005", "/States/A"],
-  ["INFO", "S000", "/"]
+  ["INFO", "S000", "/"],
+  ["WARNING", "P005", "/States/A"]
 ]}

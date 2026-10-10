@@ -1,0 +1,29 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Pick",
+  "States": {
+    "Pick": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% $states.input.ok %}",
+          "Nxet": "Done"
+        },
+        "x",
+        {
+          "Next": "Done"
+        }
+      ],
+      "Default": "Done"
+    },
+    "Empty": {
+      "Type": "Choice",
+      "Choices": [],
+      "Default": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}

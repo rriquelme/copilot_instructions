@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S003", "/States/B/Branches/2/States/Y"],
+  ["ERROR", "S042", "/States/A/Branches"],
+  ["ERROR", "S042", "/States/B/Branches/0"],
+  ["ERROR", "S042", "/States/B/Branches/1"],
+  ["ERROR", "S042", "/States/B/Branches/2/StartAt"]
+]}

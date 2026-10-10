@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J003", "/States/A/HeartbeatSeconds"],
+  ["ERROR", "S050", "/States/A/HeartbeatSeconds"],
+  ["ERROR", "S050", "/States/A/TimeoutSeconds"],
+  ["ERROR", "S050", "/States/B/HeartbeatSeconds"],
+  ["ERROR", "S050", "/States/C/HeartbeatSeconds"]
+]}

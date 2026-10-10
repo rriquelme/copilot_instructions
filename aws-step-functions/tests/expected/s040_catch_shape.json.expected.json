@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S040", "/States/A/Catch/0"],
+  ["ERROR", "S040", "/States/A/Catch/0/Nxt"],
+  ["ERROR", "S040", "/States/A/Catch/1"],
+  ["ERROR", "S040", "/States/A/Catch/2/Outptu"],
+  ["ERROR", "S040", "/States/B/Catch"]
+]}

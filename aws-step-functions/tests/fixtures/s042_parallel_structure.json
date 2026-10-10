@@ -1,0 +1,30 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Parallel",
+      "Branches": [],
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "X"
+        },
+        "nope",
+        {
+          "States": {
+            "Y": {
+              "Type": "Pass",
+              "End": true
+            }
+          }
+        }
+      ],
+      "End": true
+    }
+  }
+}

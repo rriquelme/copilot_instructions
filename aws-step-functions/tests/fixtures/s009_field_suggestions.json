@@ -1,0 +1,35 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": "m"
+      },
+      "TimeoutSeconds": 30,
+      "Resouce": "x",
+      "Next": "C",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "B"
+        }
+      ]
+    },
+    "B": {
+      "Type": "Pase",
+      "End": true
+    },
+    "C": {
+      "Type": "Fail",
+      "Output": {},
+      "Error": "E"
+    }
+  }
+}

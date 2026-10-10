@@ -1,0 +1,43 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONPath",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Map",
+      "ItemsPath": "$.items",
+      "Iterator": {
+        "StartAt": "X",
+        "States": {
+          "X": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Map",
+      "Iterator": {
+        "StartAt": "Y",
+        "States": {
+          "Y": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "ItemProcessor": {
+        "StartAt": "Z",
+        "States": {
+          "Z": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

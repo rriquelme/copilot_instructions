@@ -1,0 +1,13 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "NoResource",
+  "States": {
+    "NoResource": {"Type": "Task", "Next": "ExprResource"},
+    "ExprResource": {"Type": "Task", "Resource": "{% $states.input.arn %}", "Next": "NoFunction"},
+    "NoFunction": {"Type": "Task", "Resource": "arn:aws:states:::lambda:invoke", "Arguments": {"Payload": "{% $states.input %}"},
+                   "Output": "{% $states.result.Payload %}", "Next": "NoToken"},
+    "NoToken": {"Type": "Task", "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+                "Arguments": {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q", "MessageBody": "{% $states.input %}"},
+                "TimeoutSeconds": 300, "End": true}
+  }
+}

@@ -1,4 +1,4 @@
 {"type": "STANDARD", "diagnostics": [
-  ["ERROR", "S012", "/States/Call/Catch/0/ErrorEquals"],
-  ["ERROR", "S012", "/States/Call/Retry/1/ErrorEquals"]
+  ["ERROR", "S041", "/States/Call/Catch/0/ErrorEquals"],
+  ["ERROR", "S041", "/States/Call/Retry/1/ErrorEquals"]
 ]}

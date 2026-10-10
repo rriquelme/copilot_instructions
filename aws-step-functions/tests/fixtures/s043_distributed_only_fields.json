@@ -1,0 +1,43 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ToleratedFailurePercentage": 5,
+      "Label": "batch",
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "INLINE"
+        },
+        "StartAt": "X",
+        "States": {
+          "X": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED"
+        },
+        "StartAt": "Y",
+        "States": {
+          "Y": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S015", "/States/ExprResource/Resource"],
+  ["ERROR", "S015", "/States/NoFunction/Arguments"],
+  ["ERROR", "S015", "/States/NoResource/Resource"],
+  ["ERROR", "S015", "/States/NoToken"],
+  ["WARNING", "P005", "/States/NoFunction"]
+]}

@@ -1,0 +1,51 @@
+{
+  "Comment": "fixture",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": "m"
+      },
+      "TimeoutSeconds": 30,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "MaxAttempt": 3,
+          "IntervalSeconds": 0,
+          "BackoffRate": 0.5,
+          "JitterStrategy": "full"
+        },
+        "oops",
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "MaxAttempts": -1,
+          "Interval": 2
+        }
+      ],
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": "m"
+      },
+      "TimeoutSeconds": 30,
+      "Retry": {
+        "ErrorEquals": [
+          "States.ALL"
+        ]
+      },
+      "End": true
+    }
+  }
+}
