@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S009", "/States/M/ItemProcessor/States/Inner/Bogus"],
+  ["INFO", "S044", "/States/M"]
+]}

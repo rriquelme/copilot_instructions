@@ -1,6 +1,5 @@
 {"type": "STANDARD", "diagnostics": [
   ["ERROR", "S002", "/States/W/Next"],
-  ["ERROR", "S003", "/States/M"],
   ["ERROR", "S003", "/States/T"],
   ["INFO", "S000", "/"]
 ]}

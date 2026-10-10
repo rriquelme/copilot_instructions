@@ -1,0 +1,32 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Get",
+  "States": {
+    "Get": {
+      "Type": "Task",
+      "Comment": "lint-allow S999: not a real code",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
+      "Arguments": {
+        "JobName": "j",
+        "RunId": "r"
+      },
+      "Assign": {
+        "status": "{% $states.result.JobRun.JobRunState %}"
+      },
+      "Next": "Check"
+    },
+    "Check": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% $status = 'SUCCEEDED' %}",
+          "Next": "Done"
+        }
+      ],
+      "Default": "Get"
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}

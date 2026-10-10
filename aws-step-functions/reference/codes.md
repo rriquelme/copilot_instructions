@@ -36,6 +36,22 @@ least one ERROR, 2 something could not be linted (an `S000` line says why), 3 li
 | S020 | ERROR / WARNING | `--type EXPRESS`: `.sync`, `.waitForTaskToken`, activities or Distributed Map; WARNING for `TimeoutSeconds` > 300 | request-response integrations only, at most 300 s |
 | S021 | ERROR | JSONPath Choice rule: operator/type mismatch, `Variable` with no or several comparisons, bad `And`/`Or`/`Not` | `{"Variable": "$.x", "StringEquals": "a", "Next": "B"}` |
 | S022 | ERROR | `Next`/`Assign` on a rule nested inside `And`/`Or`/`Not` | move it to the top-level rule |
+| S023 | ERROR | optimized integration action that the service's optimized integration does not support, or `arn:aws:states:::s3:...` as a Task `Resource` | call it through the AWS SDK integration, e.g. `arn:aws:states:::aws-sdk:dynamodb:query` |
+| S024 | ERROR | duplicate JSON key: a state name defined twice in one `States` object, or any other key repeated in one object (JSON keeps only the last) | keep exactly one; give duplicated states unique names |
+| S025 | ERROR | unknown or misplaced key inside `ItemProcessor`, `ProcessorConfig`, a Parallel branch, `ItemReader`/`ReaderConfig`, `ItemBatcher`, `ResultWriter`/`WriterConfig`, `Credentials`; `*Path` variant in JSONata | move it where the message says (e.g. `"ProcessorConfig": {"Mode": "DISTRIBUTED", ...}`), or remove it |
+| S026 | ERROR / WARNING | Distributed Map values: `ItemReader` Resource/`ReaderConfig`/Bucket/Key, `ItemBatcher` limits, `ResultWriter` Resource/Bucket/`WriterConfig`, `ToleratedFailure*` range, `Label`; WARNING for missing `InputType`, CSV header, batch limit, or a batched child reading one item | use the value the message gives, e.g. `"ReaderConfig": {"InputType": "JSONL"}` |
+| S027 | ERROR / WARNING | inside an `"ExecutionType": "EXPRESS"` Distributed Map child: `.sync`, `.waitForTaskToken`, activities or a nested Distributed Map; WARNING for Wait `Seconds` / Task `TimeoutSeconds` > 300 (also under `--type EXPRESS`) | request-response integrations and at most 300 s, or `"ExecutionType": "STANDARD"` |
+| S028 | ERROR | wrong aws-sdk service name (`states`/`stepfunctions`, `events`, `logs`) | `aws-sdk:sfn:...`, `aws-sdk:eventbridge:...`, `aws-sdk:cloudwatchlogs:...` |
+| S030 | ERROR / WARNING | DynamoDB `Item`/`Key`/`ExpressionAttributeValues` value is not a typed attribute value (or `S`/`N` not a string); WARNING for an expression or `.$` value | `{"S": "text"}`, `{"N": "42"}`, `{"BOOL": true}` |
+| S031 | ERROR | camelCase top-level `Arguments`/`Parameters` key of an optimized or aws-sdk integration | rename it to PascalCase (`QueueUrl`, not `queueUrl`) |
+| S032 | ERROR | required parameter missing (`sqs:sendMessage`, `sns:publish`, `events:putEvents`, `dynamodb:*Item`, `startExecution`, `http:invoke`), or HTTP Task without a connection ARN | add the parameter the message names |
+| S033 | ERROR | HTTP Task `Method` not GET/POST/PUT/DELETE/PATCH/OPTIONS/HEAD, or a reserved header (`Authorization`, `Host`, `x-amz-*`, ...) | a valid method; credentials in the EventBridge connection, not in `Headers` |
+| S034 | WARNING | error name already matched by an earlier retrier/catcher, or a custom error after `States.TaskFailed` | remove it, or move the specific entry first |
+| S035 | WARNING | `States.Runtime` in a `Catch` (never caught) | remove it; fix the cause |
+| S036 | WARNING | Fail `Error` begins with `States.` (reserved) | use your own error name |
+| S037 | ERROR / WARNING | aws-sdk error name with the wrong prefix casing (`DynamoDB.` vs `DynamoDb.`, `s3.` vs `S3.`); WARNING when the `Exception` suffix is missing | use the name the message gives, e.g. `S3.NoSuchKeyException` |
+| S038 | ERROR | value over 99999999 (Wait `Seconds`, Task timeouts, Retry `IntervalSeconds`/`MaxAttempts`), `Version` not `"1.0"`, non-string `Comment`, `Credentials` not an object with `RoleArn` | follow the message |
+| S039 | ERROR / WARNING | definition over 1 MB; WARNING for one literal field over 256 KiB | store large data in S3/DynamoDB and pass a reference, or split into child state machines |
 | S040 | ERROR | Catch shape: not an array, entry not an object, unknown field, catcher without `Next` | `"Catch": [{"ErrorEquals": ["States.ALL"], "Next": "HandleError"}]` |
 | S041 | ERROR | `ErrorEquals`: empty or not an array, non-string name, unknown `States.*` name, `States.ALL` not alone or not in the last entry | specific errors first; `["States.ALL"]` alone, in the last entry |
 | S042 | ERROR | Parallel structure: empty `Branches`, branch without `StartAt`/`States` | `"Branches": [{"StartAt": "A", "States": {...}}]` |
@@ -92,3 +108,7 @@ Not all hints: P004 (ERROR case), P010, P011, P012 are runtime failures.
 | P010 | ERROR | JSONPath `.$` key whose value is not a path or intrinsic | `"x.$": "$.field"` or `States.Format(...)` |
 | P011 | ERROR / WARNING | malformed or unknown intrinsic function, wrong argument count | follow the usage in the message |
 | P012 | ERROR | invalid JSONPath in a `*Path` field (`$$` in `ResultPath`, variables in `ResultPath`, bad syntax) | a path into the state input, e.g. `"$.result"` |
+| P013 | INFO | HTTP Task `TimeoutSeconds` > 60 (the request itself times out after 60 s) | `"TimeoutSeconds": 60` or less |
+| P014 | WARNING | `Payload` read from the result of a task that is not a Lambda invoke | read the response field itself, e.g. `$states.result.Item` |
+| P015 | WARNING | `Output.<field>` after `states:startExecution.sync` (Output is a JSON string) | `startExecution.sync:2`, or `$parse($states.result.Output).<field>` |
+| P016 | WARNING / INFO | a Catch target reads input fields, but the catcher has no `Output`/`ResultPath` so its input is only `{Error, Cause}`; INFO when the target is also reached normally | keep the input: `"Output": "{% $merge([$states.input, {'error': $states.errorOutput}]) %}"` or `"ResultPath": "$.error"` |

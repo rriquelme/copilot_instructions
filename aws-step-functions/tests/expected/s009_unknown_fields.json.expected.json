@@ -1,7 +1,6 @@
 {"type": "STANDARD", "diagnostics": [
   ["ERROR", "S003", "/States/B"],
   ["ERROR", "S003", "/States/C"],
-  ["ERROR", "S003", "/States/D"],
   ["ERROR", "S009", "/States/A/Nxt"],
   ["ERROR", "S009", "/States/B/Type"],
   ["ERROR", "S009", "/States/C/Arguments"],

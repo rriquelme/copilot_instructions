@@ -1,0 +1,25 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "M",
+  "States": {
+    "M": {
+      "Type": "Map",
+      "Comment": "lint-allow S009: the Map's own Comment covers only the Map state",
+      "Bogus": 1,
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "INLINE"
+        },
+        "StartAt": "Inner",
+        "States": {
+          "Inner": {
+            "Type": "Pass",
+            "Bogus": 2,
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}
