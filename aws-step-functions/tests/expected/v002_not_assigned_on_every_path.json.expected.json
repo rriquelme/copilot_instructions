@@ -1,3 +1,5 @@
 {"type": "STANDARD", "diagnostics": [
   ["ERROR", "V002", "/States/After/Output"]
-]}
+], "contains": {
+  "V002@/States/After/Output": "only assigned inside a Map/Parallel, at /States/Use/ItemProcessor/States/Inner/Assign/inner"
+}}

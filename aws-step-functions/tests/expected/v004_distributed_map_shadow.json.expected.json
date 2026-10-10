@@ -1,3 +1,5 @@
 {"type": "STANDARD", "diagnostics": [
-  ["WARNING", "V004", "/States/Each/ItemProcessor/States"]
-]}
+  ["WARNING", "V004", "/States/Each/ItemProcessor/States/Work/Assign/limit"]
+], "contains": {
+  "V004@/States/Each/ItemProcessor/States/Work/Assign/limit": "Map \"Each\" reassigns $limit, a variable already assigned outside it at /States/Init/Assign/limit"
+}}

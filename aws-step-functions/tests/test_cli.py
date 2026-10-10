@@ -206,6 +206,18 @@ def order_and_grouping(d: Path, tmp: str) -> None:
     check("--json: repeated diagnostics stay one item each",
           data is not None and len([x for x in data["files"][0]["diagnostics"] if x["code"] == "S009"]) == 6, out)
 
+    shadow = ('{"QueryLanguage": "JSONata", "StartAt": "Init", "States": {\n'
+              '  "Init": {"Type": "Pass", "Assign": {"limit": 3}, "Next": "Each"},\n'
+              '  "Each": {"Type": "Map", "Items": [1], "ItemProcessor": {"StartAt": "Dup name", "States": {\n'
+              '    "Dup name": {"Type": "Pass", "Assign": {"limit": 5}, "Output": "{% $limit %}", "End": true}}},\n'
+              '    "Next": "Dup name"},\n'
+              '  "Dup name": {"Type": "Pass", "Output": "{% $limit %}", "End": true}}}')
+    (d / "shadow.json").write_text(shadow, encoding="utf-8")
+    code, out = run(["shadow.json"], cwd=tmp)
+    check("other locations named in a message carry their line (V004 outer Assign, S007 name with a space)",
+          "shadow.json:4: WARNING V004 /States/Each/ItemProcessor/States/Dup name/Assign/limit" in out
+          and "at /States/Init/Assign/limit (line 2)" in out and "already used at /States/Dup name (line 6)" in out, out)
+
     typo = json.dumps({"QueryLanguage": "JSONata", "StartAt": "Get", "States": {
         "Get": {"Type": "Pass", "Next": "ChargeOrdr"}, "ChargeOrder": {"Type": "Pass", "Next": "Done"}, "Done": {"Type": "Succeed"}}})
     (d / "typo.json").write_text(typo, encoding="utf-8")

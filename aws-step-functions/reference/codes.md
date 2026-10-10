@@ -89,7 +89,7 @@ least one ERROR, 2 something could not be linted (an `S000` line says why), 3 li
 | V001 | ERROR | variable never assigned anywhere | assign it earlier, or use the suggested name |
 | V002 | ERROR | variable not assigned on any path that reaches this state (only later, in the same state, or in an inner scope) | assign it in a state before the read |
 | V003 | ERROR | outer variable read inside a Distributed Map | pass it in through `ItemSelector` |
-| V004 | WARNING | inner scope assigns a name an outer scope assigns (AWS docs forbid it; not rejected at creation) | rename the inner variable |
+| V004 | WARNING | a state inside a Map/Parallel reassigns a variable assigned outside it; it does not update the outer value (AWS docs forbid the name reuse; not rejected at creation) | rename the inner variable; pass results out through Output |
 | V005 | WARNING | Pass state that only assigns variables | move the `Assign` to the previous state or the matching Choice rule |
 | V006 | WARNING | variable assigned but never read | delete it from the `Assign` |
 | V007 | ERROR | invalid `Assign` key (syntax, `.`/`[`, over 80 characters) | rename as the message says |

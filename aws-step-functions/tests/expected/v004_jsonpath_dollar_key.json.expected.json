@@ -1,4 +1,4 @@
 {"type": "STANDARD", "diagnostics": [
   ["INFO", "J000", "/QueryLanguage"],
-  ["WARNING", "V004", "/States/Each/ItemProcessor/States"]
+  ["WARNING", "V004", "/States/Each/ItemProcessor/States/Work/Assign/limit"]
 ]}

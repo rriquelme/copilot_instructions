@@ -2011,7 +2011,7 @@ def check_variable_reads(used: set[str], loc: str, *, in_vars: set[str], ever_as
             continue
         if v not in ever_assigned:
             if v in all_assigned:
-                diags.error("V002", loc, f"${v} is assigned inside the Map/Parallel scope {all_assigned[v]}, which is not visible "
+                diags.error("V002", loc, f"${v} is only assigned inside a Map/Parallel, at {all_assigned[v]}, which is not visible "
                             "here; variables die when that state completes - pass the value out through its Output instead")
                 continue
             hint = f" (did you mean {FUNCTION_HINTS[v]}?)" if jsonata_hints and v in FUNCTION_HINTS else ""
@@ -2023,8 +2023,10 @@ def check_variable_reads(used: set[str], loc: str, *, in_vars: set[str], ever_as
                         hint = f' (the Assign key "{bad[0]}" is not a valid name; rename it to "{v}" as V007 says)'
             diags.error("V001", loc, f"${v} is never assigned anywhere in the state machine{hint}")
         else:
-            diags.error("V002", loc, f"${v} is not assigned on any path that reaches this state (it is only assigned later, "
-                        "or in this same state, whose Assign is not visible to its own fields); assign it before this state")
+            where = f", e.g. at {all_assigned[v]}" if v in all_assigned else ""
+            diags.error("V002", loc, f"${v} is not assigned on any path that reaches this state: it is only assigned later or in "
+                        f"this same state (a state's Assign is visible only from the next state on){where}; assign it in a state "
+                        "before this one")
 
 
 # $states.* fields and the Step Functions context object. None = single value, "*" = free-form JSON below.
@@ -2522,6 +2524,17 @@ SUGGEST_BUDGET = 20_000  # state-name comparisons per file (lint_text call) for 
 _suggest_budget = {"left": SUGGEST_BUDGET}
 
 
+def scope_container(location: str) -> str:
+    """'Map "Each"' / 'Parallel "P" branch 1' for a nested States location, "the workflow" for the top level."""
+    m = re.match(r"^(.*)/([^/]*)/(?:ItemProcessor|Iterator)/States$", location)
+    if m:
+        return f'Map "{m.group(2)}"'
+    m = re.match(r"^(.*)/([^/]*)/Branches/(\d+)/States$", location)
+    if m:
+        return f'Parallel "{m.group(2)}" (branch {m.group(3)})'
+    return "the workflow"
+
+
 class Scope:
     def __init__(self, *, states: dict, start_at: Any, location: str, top_lang: str, diags: Diagnostics, jsonata,
                  all_names: dict[str, str], all_assigned: dict[str, str], outer_assigned: set[str], distributed: bool) -> None:
@@ -2592,22 +2605,34 @@ class Scope:
                        f'scope; set StartAt to the name of the first state of this States block'
                        + (f' (e.g. "StartAt": {json.dumps(self.names[0])})' if self.names else "")))
 
-        for st in self.states.values():
+        sites: dict[str, str] = {}  # variable -> where this scope first assigns it, e.g. /States/A/Assign/x
+
+        def note(assign: Any, where: str) -> None:
+            if isinstance(assign, dict):
+                for k in assign:
+                    sites.setdefault(k[:-2] if k.endswith(".$") else k, f"{where}/Assign/{k}")
+
+        for name, st in self.states.items():
             if not isinstance(st, dict):
                 continue
-            self.scope_assigned |= assign_keys(st.get("Assign"))
-            for r in as_list(st.get("Choices")):
+            note(st.get("Assign"), f"{self.location}/{name}")
+            for i, r in enumerate(as_list(st.get("Choices"))):
                 if isinstance(r, dict):
-                    self.scope_assigned |= assign_keys(r.get("Assign"))
-            for c in as_list(st.get("Catch")):
+                    note(r.get("Assign"), f"{self.location}/{name}/Choices/{i}")
+            for i, c in enumerate(as_list(st.get("Catch"))):
                 if isinstance(c, dict):
-                    self.scope_assigned |= assign_keys(c.get("Assign"))
+                    note(c.get("Assign"), f"{self.location}/{name}/Catch/{i}")
+        self.scope_assigned = set(sites)
+        container = scope_container(self.location)
         for v in sorted(self.scope_assigned):
-            self.all_assigned.setdefault(v, self.location)
             if v in self.outer_assigned:
-                d.warn("V004", self.location, f'variable "{v}" is assigned both in this scope and in an enclosing scope; the AWS docs say '
-                       "inner scopes cannot reuse outer variable names (not rejected when the state machine is created); "
-                       "rename the inner variable")
+                d.warn("V004", sites[v], f'{container} reassigns ${v}, a variable already assigned outside it at '
+                       f'{self.all_assigned.get(v, "an outer scope")}. AWS documents that a state inside a Map or Parallel must '
+                       "not assign a variable with the same name as an outer one (the definition is still accepted at "
+                       f'creation): the inner value does not overwrite the outer ${v}, it only shadows it inside the '
+                       f'{container.split(" ", 1)[0]}. Give the inner variable its own name (e.g. "{v[:60]}Item") and read that '
+                       "name inside; to send a value out, use the Map/Parallel Output")
+            self.all_assigned.setdefault(v, sites[v])
 
         for name in self.names:
             self.analyse_state(name)
@@ -5011,10 +5036,13 @@ CODES: dict[str, tuple[str, str, str]] = {
              "Distributed Map child workflows cannot see outer variables; pass them in through ItemSelector. "
              'Before: "{% $limit %}" inside the Map  After: "ItemSelector": {"limit": "{% $limit %}", "item": '
              '"{% $states.context.Map.Item.Value %}"} and read $states.input.limit'),
-    "V004": ("WARNING", "variable shadows an outer variable",
-             "The AWS docs say a Map/Parallel scope cannot assign a variable that an enclosing scope also assigns (the "
-             "definition is still accepted at creation); rename the inner one. "
-             'Before: inner "Assign": {"total": ...}  After: inner "Assign": {"itemTotal": ...}'),
+    "V004": ("WARNING", "Map/Parallel reassigns an outer variable",
+             "A state inside a Map or Parallel assigns a variable that is also assigned outside it. It looks like it updates "
+             "the outer value, but it does not: the inner scope gets its own copy and the outer variable keeps its value. "
+             "AWS documents the name reuse as not allowed (the definition is still accepted at creation). Rename the inner "
+             "variable and pass results out through the Map/Parallel Output. "
+             'Before: Init "Assign": {"total": 0}; inside the Map "Assign": {"total": ...}  After: inside the Map '
+             '"Assign": {"itemTotal": ...}'),
     "V005": ("WARNING", "Pass state only assigns variables",
              "Fold the Assign into the previous state (or the matching Choices rule) and delete the Pass state. "
              'Before: A -> SetVars {"Type": "Pass", "Assign": {"x": 1}, "Next": "B"}  After: A with "Assign": {"x": 1}, "Next": "B"'),
@@ -5158,14 +5186,46 @@ class SourceMap:
         return {"": lo}, ""  # not found: everything on the definition's first line
 
 
+MESSAGE_PATH_RE = re.compile(r"(?<![\w$/])/States/")
+MESSAGE_PATH_END = " ,;)\"'"
+MESSAGE_PATHS_MAX = 10  # paths annotated per message
+
+
+def annotate_message_paths(message: str, own: str, offsets: dict[str, int], prefix: str, smap: SourceMap) -> str:
+    """Append " (line N)" to each location path a message mentions ("already used at /States/A", "assigned at
+    /States/B/Assign/x"). State names may contain spaces and punctuation, so the longest candidate that is a real
+    path in the source wins; a path that is not found exactly is left as it is."""
+    if "/States/" not in message:
+        return message
+    out, last = [], 0
+    for n, m in enumerate(MESSAGE_PATH_RE.finditer(message)):
+        if n >= MESSAGE_PATHS_MAX or m.start() < last:
+            break
+        start, window = m.start(), message[m.start():m.start() + 400]
+        ends = [j for j, ch in enumerate(window) if ch in MESSAGE_PATH_END or (ch == "." and window[j + 1:j + 2] in ("", " "))]
+        ends.append(len(window))
+        for j in sorted(set(ends), reverse=True):
+            path = window[:j]
+            if path == own or prefix + path not in offsets:
+                continue
+            end = start + j
+            if not message.startswith(" (line", end):
+                out.append(message[last:end] + f" (line {smap.line(offsets[prefix + path])})")
+                last = end
+            break
+    return "".join(out) + message[last:] if out else message
+
+
 def add_lines(diags: Diagnostics, items: list[dict], smap: SourceMap, label: str) -> None:
-    """Set item["line"] and the document position of each item of one definition (locations not yet prefixed)."""
+    """Set item["line"] and the document position of each item of one definition (locations not yet prefixed), and
+    the line of every other location its message mentions."""
     offsets, prefix = smap.definition(label)
     for item in items:
         pos = offset_of(offsets, prefix, item["location"])
         if pos is not None:
             item["line"] = smap.line(pos)
             diags.positions[id(item)] = pos
+        item["message"] = annotate_message_paths(item["message"], item["location"], offsets, prefix, smap)
 
 
 LINT_ALLOW_RE = re.compile(r"lint-allow\b[ \t]*([A-Za-z]\d{3}(?:[ \t]*,[ \t]*[A-Za-z]\d{3})*)?[ \t]*"
