@@ -117,8 +117,14 @@ machine-readable output. Add `--type EXPRESS`
 for Express workflows (rejects `.sync`, `.waitForTaskToken`, Distributed Map,
 activities).
 
+- Each line is `<file>:<line>: SEVERITY CODE <location>: <message>`.
+  `--explain CODE` prints how to fix a code, with a before/after example.
 - Fix every `ERROR`, re-run until `0 error(s)`.
 - Fix every `WARNING` or give a one-line reason it is intended.
+- Only when a diagnostic is truly intended (e.g. a bounded loop flagged by
+  `S017`), add `lint-allow <CODE>: <reason>` to the `Comment` of the state it
+  is reported on; without a reason it is ignored. Never use it to hide errors
+  you could fix.
 - `INFO` lines are hints; act on `P001` (Lambda `Payload` output) unless the
   raw invoke response is wanted.
 - The lint output of the final run goes in the reply verbatim, in a fenced block.

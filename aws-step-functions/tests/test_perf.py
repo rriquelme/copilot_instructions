@@ -178,6 +178,34 @@ ANALYSIS_CASES += [
 ]
 
 
+# CLI round: S002 "did you mean" over many states, S003 orphan roots, line numbers, lint-allow suppressions
+def _typo_def(n: int) -> str:  # every state targets a near-miss name: n S002 suggestions over n names
+    states = {f"State{i:05d}": {"Type": "Pass", "Next": f"Stat{i + 1:05d}" if i + 1 < n else "Nope"} for i in range(n)}
+    return json.dumps({"StartAt": "State00000", "States": states})
+
+
+def _orphans_def(n: int) -> str:  # n/2 orphan roots each starting a chain, plus an unreachable loop
+    states = {"A": {"Type": "Succeed"}}
+    for i in range(n):
+        states[f"O{i}"] = {"Type": "Pass", "Next": f"O{i + 1}" if i % 2 == 0 else "A"}
+    states["L1"] = {"Type": "Pass", "Next": "L2"}
+    states["L2"] = {"Type": "Pass", "Next": "L1"}
+    return json.dumps({"StartAt": "A", "States": states}, indent=2)
+
+
+def _allow_def(n: int) -> str:  # n states, each with a suppressed and an unsuppressed diagnostic
+    states = {f"S{i}": {"Type": "Pass", "Comment": "lint-allow S009: generated", "Bogus": 1,
+                        "Next": f"S{i + 1}" if i + 1 < n else "Missing"} for i in range(n)}
+    return json.dumps({"StartAt": "S0", "States": states}, indent=2)
+
+
+ANALYSIS_CASES += [
+    ("cli_s002_suggestions_5000", lambda: _typo_def(5000)),
+    ("cli_s003_orphan_roots_20000", lambda: _orphans_def(20000)),
+    ("cli_lint_allow_10000", lambda: _allow_def(10000)),
+]
+
+
 def load_linter():
     sys.dont_write_bytecode = True  # keep __pycache__ out of the skill folder
     spec = importlib.util.spec_from_file_location("lint_asl_perf_test", LINTER)
