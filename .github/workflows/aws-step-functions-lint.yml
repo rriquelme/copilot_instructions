@@ -1,0 +1,78 @@
+name: aws-step-functions lint tests
+
+on:
+  push:
+    paths:
+      - "aws-step-functions/**"
+      - ".github/workflows/aws-step-functions-lint.yml"
+  pull_request:
+    paths:
+      - "aws-step-functions/**"
+      - ".github/workflows/aws-step-functions-lint.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stdlib:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.13"]
+    defaults:
+      run:
+        shell: bash
+        working-directory: aws-step-functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Golden fixtures
+        run: python tests/run_tests.py
+      - name: Fuzz (seed 1)
+        run: python tests/test_fuzz.py --seed 1
+      - name: Fuzz (seed 2)
+        run: python tests/test_fuzz.py --seed 2
+      - name: Every other test script
+        # test_*.py picks up suites added later; optional-parser cases print SKIP without the packages
+        run: |
+          status=0
+          for t in tests/test_*.py; do
+            [ "$t" = tests/test_fuzz.py ] && continue
+            echo "::group::$t"
+            python "$t" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+  optional-parsers:
+    name: optional parsers (jsonata-python, PyYAML) / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: aws-step-functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install jsonata-python pyyaml
+      - name: Optional-parser cases (J006, YAML-native definitions)
+        run: python tests/test_optional_parsers.py
+      - name: Golden fixtures stay the same with the packages installed
+        run: python tests/run_tests.py
+      - name: No slowdowns or crashes with the packages installed
+        run: |
+          python tests/test_perf.py
+          python tests/test_fuzz.py --seed 1
+          python tests/test_cli.py
