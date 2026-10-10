@@ -15,7 +15,10 @@ the mechanical ones, this page is for writing them right the first time.
 }
 ```
 
-- `QueryLanguage` defaults to `JSONPath`. New machines: `"JSONata"` at the top.
+- Allowed top-level fields: `Comment`, `QueryLanguage`, `StartAt`, `States`,
+  `TimeoutSeconds`, `Version`. Anything else is rejected (linter `S046`).
+- `QueryLanguage` is exactly `"JSONPath"` or `"JSONata"` and defaults to
+  `JSONPath`. New machines: `"JSONata"` at the top.
 - A JSONata machine cannot contain JSONPath states. A JSONPath machine may
   contain states with `"QueryLanguage": "JSONata"`.
 - `StartAt` must name a state in the same `States` object. Case-sensitive.
@@ -93,8 +96,8 @@ everything except Succeed and Fail.
 }
 ```
 
-- `Items` must be an array (or `{% %}` producing one). Without `Items` the whole
-  state input is iterated.
+- `Items` must be an array (or `{% %}` producing one); a Distributed Map also
+  accepts an object. Without `Items` the whole state input is iterated.
 - Inside `ItemSelector`, `$states.input` is the **Map state's** input, the item is
   `$states.context.Map.Item.Value`.
 - Inside `ItemProcessor`, `$states.input` is the item (or the `ItemSelector` result).
@@ -175,8 +178,9 @@ own name (`MyCustomError`) or as `States.TaskFailed`.
 
 - `ErrorEquals` non-empty. `States.ALL` alone in its array and in the **last**
   retrier/catcher.
-- Retry fields: `IntervalSeconds` (default 1), `MaxAttempts` (default 3, 0 = no retry),
-  `BackoffRate` (default 2.0), `MaxDelaySeconds`, `JitterStrategy` `FULL|NONE`.
+- Retry fields: `IntervalSeconds` (positive integer, default 1), `MaxAttempts`
+  (default 3, 0 = no retry), `BackoffRate` (>= 1.0, default 2.0), `MaxDelaySeconds`
+  (1 to 31,622,400; caps the backoff), `JitterStrategy` `FULL|NONE` (default `NONE`).
 - Catch fields in JSONata: `ErrorEquals`, `Next`, `Output`, `Assign`. `ResultPath`
   is JSONPath-only. Without `Output` the catch target receives
   `{ "Error", "Cause" }` only, the original input is lost unless you include it.
@@ -190,7 +194,8 @@ own name (`MyCustomError`) or as `States.TaskFailed`.
 | Need | Resource | Notes |
 |---|---|---|
 | Lambda | `arn:aws:states:::lambda:invoke` | `Output: {% $states.result.Payload %}`; add the Lambda transient-error Retry |
-| DynamoDB | `arn:aws:states:::dynamodb:putItem` / `getItem` / `updateItem` / `query` | attribute values are typed: `{"S": "{% $string($id) %}"}`, `{"N": "{% $string($n) %}"}` |
+| DynamoDB item | `arn:aws:states:::dynamodb:getItem` / `putItem` / `updateItem` / `deleteItem` (the only optimized DynamoDB actions) | attribute values are typed: `{"S": "{% $string($id) %}"}`, `{"N": "{% $string($n) %}"}`; errors are `DynamoDB.<Exception>` |
+| DynamoDB query, scan, batch, ... | `arn:aws:states:::aws-sdk:dynamodb:query` (any other action: `aws-sdk:dynamodb:<action>`) | SDK integration: same typed values; errors are `DynamoDb.<Exception>` (lowercase `b`) |
 | SQS | `arn:aws:states:::sqs:sendMessage` | `MessageBody` accepts a string or object |
 | SNS | `arn:aws:states:::sns:publish` | `Message` string |
 | EventBridge | `arn:aws:states:::events:putEvents` | `Entries[].Detail` object |

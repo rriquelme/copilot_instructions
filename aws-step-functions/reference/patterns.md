@@ -139,7 +139,9 @@ Every path out of the Choice assigns `tier`, so later states may read `$tier`.
   "Type": "Parallel",
   "Branches": [
     { "StartAt": "Get customer", "States": { "Get customer": { "Type": "Task", "Resource": "arn:aws:states:::dynamodb:getItem", "Arguments": { "TableName": "customers", "Key": { "id": { "S": "{% $customerId %}" } } }, "Output": { "customer": "{% $states.result.Item %}" }, "End": true } } },
-    { "StartAt": "Get limits", "States": { "Get limits": { "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke", "Arguments": { "FunctionName": "arn:aws:lambda:eu-west-1:123456789012:function:limits", "Payload": { "customerId": "{% $customerId %}" } }, "Output": { "limits": "{% $states.result.Payload %}" }, "End": true } } }
+    { "StartAt": "Get limits", "States": { "Get limits": { "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke", "Arguments": { "FunctionName": "arn:aws:lambda:eu-west-1:123456789012:function:limits", "Payload": { "customerId": "{% $customerId %}" } }, "Output": { "limits": "{% $states.result.Payload %}" }, "TimeoutSeconds": 30,
+      "Retry": [ { "ErrorEquals": ["Lambda.ClientExecutionTimeoutException", "Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 2, "MaxAttempts": 6, "BackoffRate": 2, "JitterStrategy": "FULL" } ],
+      "End": true } } }
   ],
   "Output": "{% $merge($states.result) %}",
   "Assign": { "creditLimit": "{% $states.result[1].limits.credit %}" },

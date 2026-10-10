@@ -18,6 +18,7 @@ Reference files in this folder (read the one you need before writing):
 - `reference/asl-rules.md` — fields allowed per state type, variable scoping,
   data flow, error names, Retry/Catch rules, integration ARNs.
 - `reference/patterns.md` — linted, copy-safe snippets for the common shapes.
+- `reference/codes.md` — every linter code: severity, meaning, one-line fix.
 
 ## Hard rules (apply while writing)
 
@@ -51,9 +52,10 @@ Reference files in this folder (read the one you need before writing):
    `StartAt` Pass that captures execution input). Put the `Assign` on the state
    that produces the value, or in the matching Choice rule.
 8. **Every Choice has a `Default`.** Every Task that can hang has
-   `TimeoutSeconds`. Every `lambda:invoke` has the transient-error `Retry`
-   from `reference/patterns.md` and `"Output": "{% $states.result.Payload %}"`
-   (or reads `.Payload` in `Assign`).
+   `TimeoutSeconds`. Every Lambda task (`lambda:invoke` or a Lambda function
+   ARN) has the transient-error `Retry` from `reference/patterns.md` (the
+   linter reports a missing one as `P005` WARNING). Every `lambda:invoke` has
+   `"Output": "{% $states.result.Payload %}"` (or reads `.Payload` in `Assign`).
 9. **Guard optional input.**
    `$exists($states.input.maybe) ? $states.input.maybe : null`. An expression that
    yields nothing fails the execution.
@@ -102,23 +104,39 @@ few lines, split into `Assign` steps on the states that produce the data.
 
 ### Step 3. Lint (mandatory)
 
+bash / zsh:
+
 ```sh
-python3 ~/.copilot/skills/aws-step-functions/scripts/lint_asl.py <path-to-definition>
+python3 "$HOME/.copilot/skills/aws-step-functions/scripts/lint_asl.py" <path-to-definition>
 ```
+
+Windows PowerShell (`~` is not expanded for native programs, and `python3`
+may be the Microsoft Store stub):
+
+```powershell
+py -3 "$HOME\.copilot\skills\aws-step-functions\scripts\lint_asl.py" <path-to-definition>
+```
+
+If `py` is not found, use `python` in its place.
 
 Standard library only, Python 3.9+. Works on plain JSON and on files with an
 embedded JSON definition (Terraform heredoc/templatefile with `${...}`,
-CloudFormation JSON, or a JSON string in YAML `DefinitionString`). Terraform
-`jsonencode({...})` and YAML-mapping `Definition:` are not JSON: the linter
-prints the command that renders them to JSON; pipe that into `lint_asl.py -`.
-Use `-` to lint stdin; quote globs (`"sfn/*.json"`). Exit code 0 clean, 1
-errors, 2 nothing linted (fix the S000 line), 3 linter crash. `--json` gives
-machine-readable output. Add `--type EXPRESS`
-for Express workflows (rejects `.sync`, `.waitForTaskToken`, Distributed Map,
-activities).
+CloudFormation JSON templates including `Fn::Join`/`Fn::Sub`
+`DefinitionString`s, or a JSON string in a YAML `DefinitionString`). Terraform
+`jsonencode({...})` and a YAML-mapping `Definition:`/`DefinitionBody:` are not
+JSON: the linter prints the command that renders them to JSON; pipe that into
+`lint_asl.py -`. Use `-` to lint stdin; quote globs (`"sfn/*.json"`, expanded
+by the linter itself). `--json` gives machine-readable output. Add
+`--type EXPRESS` for Express workflows (rejects `.sync`, `.waitForTaskToken`,
+Distributed Map and activities; warns on `TimeoutSeconds` over 300).
+
+Exit code: 0 no ERROR (WARNINGs and INFOs may remain, so read the output),
+1 at least one ERROR, 2 some input could not be linted (an `S000` line says
+why; takes precedence over 1), 3 linter crash.
 
 - Fix every `ERROR`, re-run until `0 error(s)`.
-- Fix every `WARNING` or give a one-line reason it is intended.
+- Fix every `WARNING`, or give a one-line reason it is intended
+  (e.g. "S017: bounded pagination loop").
 - `INFO` lines are hints; act on `P001` (Lambda `Payload` output) unless the
   raw invoke response is wanted.
 - The lint output of the final run goes in the reply verbatim, in a fenced block.
@@ -127,15 +145,29 @@ activities).
   (`pip install jsonata-python`, or `uv add --dev jsonata-python`) and re-lint;
   if installing is not allowed, say so in the report.
 
-Linter codes: `S0xx` structure (targets, orphans, Next/End, fields per type,
-Retry/Catch shape, loops that never finish or have no Wait, Resource ARN and
-`.sync`/`.waitForTaskToken` support, Express limits, JSONPath Choice rules),
-`J0xx` JSONata mode (forbidden JSONPath fields, `{% %}` wrapping, unknown
-functions, argument counts, bad operators, `$states.*`/`$states.context.*`
-fields and placement, syntax), `V0xx` variables (never assigned, not on every
-path, wrong scope, shadowing, Pass-only-assign, never read, invalid `Assign`
-names), `P0xx` practice hints (Lambda payload/retry, Retry hygiene, intrinsic
-functions and path syntax in JSONPath states).
+Linter codes (full table with the fix for each: `reference/codes.md`). The
+severity, not the family, decides what you must do: **every ERROR and every
+WARNING must be fixed or justified, in every family.**
+
+- `S0xx` structure: file and definition discovery (`S000`), targets, orphans,
+  Next/End, fields per state type, top-level fields, Choice/Retry/Catch/
+  ErrorEquals shape, Map/Parallel structure, Task timeouts, loops that never
+  finish or have no Wait, Resource ARN and `.sync`/`.waitForTaskToken`
+  support, Express limits, JSONPath Choice rules. Mostly ERRORs; WARNINGs
+  for a Choice without `Default`, a loop without a Wait, a Catch that loops
+  back, a deprecated `Iterator`.
+- `J0xx` JSONata mode: JSONPath fields or keys in JSONata states, `{% %}`
+  wrapping, unknown functions, argument counts, bad operators,
+  `$states.*`/`$states.context.*` fields and placement, syntax. ERRORs, plus
+  WARNINGs for likely mistakes; `J000` is the INFO that a machine is JSONPath.
+- `V0xx` variables: never assigned, not on every path, wrong scope,
+  shadowing, invalid `Assign` names (ERRORs); Pass-only-assign, never read
+  (WARNINGs).
+- `P0xx` practice and JSONPath correctness: `P001` (Lambda `Payload`) is an
+  INFO; `P002` (callback without timeout), `P003` (`States.Runtime` retried)
+  and `P005` (Lambda task without the transient-error Retry) are WARNINGs;
+  `P004` (`MaxDelaySeconds`), `P010` (`.$` values), `P011` (intrinsic
+  functions) and `P012` (path syntax) are ERRORs when the value is invalid.
 
 ### Step 4. Validate with AWS (when the CLI and credentials are available)
 
@@ -159,8 +191,11 @@ aws stepfunctions test-state --definition file://<state-or-machine.json> \
   --role-arn <execution role arn>
 ```
 
-`status` must be `SUCCEEDED` (or the intended `CAUGHT_ERROR`); `inspectionData`
-shows `afterArguments`, `afterResultPath`, and resulting `variables`.
+With `--state-name`, `--definition` must be the whole state machine; without
+it, pass the JSON of that one state. `status` must be `SUCCEEDED` (or the
+intended `CAUGHT_ERROR`; `FAILED` and `RETRIABLE` mean it did not work);
+`inspectionData` shows `afterArguments`, `afterResultPath`, and resulting
+`variables`.
 
 ### Step 5. Report
 
