@@ -1,0 +1,31 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "M",
+  "States": {
+    "M": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ItemSelector": {
+        "v": "{% $states.context.Map.Item.Value.sku %}",
+        "i": "{% $states.context.Map.Item.Index %}",
+        "k": "{% $states.context.Map.Item.Key %}"
+      },
+      "ItemProcessor": {
+        "StartAt": "P",
+        "States": {
+          "P": {
+            "Type": "Pass",
+            "Output": {
+              "bad": "{% $states.context.Map.Item.Value %}"
+            },
+            "End": true
+          }
+        }
+      },
+      "Output": {
+        "x": "{% $states.context.Map.Item.Index %}"
+      },
+      "End": true
+    }
+  }
+}

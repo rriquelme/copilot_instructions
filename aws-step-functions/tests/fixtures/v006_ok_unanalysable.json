@@ -1,0 +1,3 @@
+{"QueryLanguage":"JSONata","StartAt":"A","States":{
+ "A":{"Type":"Pass","Assign":{"x":1},"Next":"B"},
+ "B":{"Type":"Pass","Output":" {% $x %}","End":true}}}

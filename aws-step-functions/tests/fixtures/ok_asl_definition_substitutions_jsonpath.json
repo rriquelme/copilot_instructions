@@ -1,0 +1,15 @@
+{
+  "StartAt": "Call",
+  "States": {
+    "Call": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName": "${FnArn}", "Payload.$": "$", "Env": "${Env}"},
+      "ResultSelector": {"body.$": "$.Payload"},
+      "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"], "MaxAttempts": 3}],
+      "Next": "Wait"
+    },
+    "Wait": {"Type": "Wait", "SecondsPath": "$.body.delay", "Next": "Put"},
+    "Put": {"Type": "Task", "Resource": "arn:aws:states:::sqs:sendMessage", "Parameters": {"QueueUrl": "${QueueUrl}", "MessageBody.$": "States.JsonToString($.body)"}, "End": true}
+  }
+}

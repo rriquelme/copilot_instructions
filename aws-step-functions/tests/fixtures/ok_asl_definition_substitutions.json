@@ -1,0 +1,27 @@
+{
+  "Comment": "SAM DefinitionUri file with DefinitionSubstitutions",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Get",
+  "States": {
+    "Get": {
+      "Type": "Task",
+      "Resource": "arn:${AWS::Partition}:states:::dynamodb:getItem",
+      "Arguments": {"TableName": "${TableName}", "Key": {"pk": {"S": "{% $states.input.id %}"}}},
+      "Output": "{% $states.result.Item %}",
+      "Next": "Call"
+    },
+    "Call": {
+      "Type": "Task",
+      "Resource": "${ProcessFunctionArn}",
+      "Arguments": {"prefix": "{% '${Prefix}' & $states.input.pk.S %}", "q": "${QueueUrl}"},
+      "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"], "MaxAttempts": 3}],
+      "Next": "Notify"
+    },
+    "Notify": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Arguments": {"TopicArn": "${TopicArn}", "Message": "{% $string($states.input) %}"},
+      "End": true
+    }
+  }
+}

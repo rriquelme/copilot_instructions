@@ -1,0 +1,17 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "P",
+  "States": {
+    "P": {
+      "Type": "Pass",
+      "Output": {
+        "k0": "{% $states.input.name.$uppercase() %}",
+        "k1": "{% $states.input.name.$substring(0, 2) %}",
+        "k2": "{% $states.input.items[$length() > 2] %}",
+        "k3": "{% $states.input.items.($string()) %}",
+        "k4": "{% $states.input.items.$string() %}"
+      },
+      "End": true
+    }
+  }
+}

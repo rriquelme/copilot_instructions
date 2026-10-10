@@ -1,0 +1,11 @@
+{
+  "Resources": {
+    "SM": {
+      "Type": "AWS::StepFunctions::StateMachine",
+      "Properties": {
+        "DefinitionString": {"Fn::Sub": ["{\"StartAt\":\"W\",\"States\":{\"W\":{\"Type\":\"Wait\",\"Seconds\":${Delay},\"Next\":\"P\"},\"P\":{\"Type\":\"Task\",\"Resource\":\"arn:${AWS::Partition}:states:::sns:publish\",\"Parameters\":{\"TopicArn\":\"${Topic}\",\"Message.$\":\"$\"},\"End\":true}}}", {"Delay": {"Ref": "DelayParam"}, "Topic": {"Ref": "TopicRes"}}]},
+        "DefinitionSubstitutions": {"Unused": "x"}
+      }
+    }
+  }
+}

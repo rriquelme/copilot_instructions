@@ -1,0 +1,11 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Start",
+  "States": {
+    "Start": {"Type": "Pass", "Next": "${first_step}"},
+%{ for s in steps ~}
+    "${s}": {"Type": "Pass", "Next": "Done"},
+%{ endfor ~}
+    "Done": {"Type": "Succeed"}
+  }
+}

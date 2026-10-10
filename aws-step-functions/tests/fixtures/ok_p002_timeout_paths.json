@@ -1,0 +1,13 @@
+{
+  "StartAt": "Approve",
+  "States": {
+    "Approve": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "TimeoutSecondsPath": "$.approvalTimeout",
+      "HeartbeatSecondsPath": "$.heartbeat",
+      "Parameters": {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q", "MessageBody": {"token.$": "$$.Task.Token"}},
+      "End": true
+    }
+  }
+}

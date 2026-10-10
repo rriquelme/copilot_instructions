@@ -1,0 +1,4 @@
+{"QueryLanguage":"JSONata", "StartAt":"A","States":{
+ "A":{"Type":"Pass","Next":"B"},
+ "B":{"Type":"Wait","Seconds":5,"Next":"C"},
+ "C":{"Type":"Choice","Choices":[{"Condition":"{% $states.input.x = 1 %}","Next":"A"}],"Default":"B"}}}

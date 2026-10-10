@@ -1,0 +1,1 @@
+{"StartAt": "A", "States": {"A": {"Type": "Task", "Resource": "arn:aws:states:::lambda:invoke", "Choices": true, "Next": "A", "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "B"}]}, "B": {"Type": "Succeed"}}}

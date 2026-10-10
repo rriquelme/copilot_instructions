@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "/States/Fan/Next"],
+  ["INFO", "S000", "/"]
+]}

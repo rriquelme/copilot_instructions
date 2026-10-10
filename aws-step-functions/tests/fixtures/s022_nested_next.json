@@ -1,0 +1,6 @@
+{"StartAt":"C","States":{
+ "C":{"Type":"Choice","Choices":[
+   {"And":[{"Variable":"$.a","IsPresent":true,"Next":"D"},
+           {"Not":{"Variable":"$.b","StringEquals":"x","Next":"D"}}],"Next":"D"}
+ ],"Default":"D"},
+ "D":{"Type":"Succeed"}}}

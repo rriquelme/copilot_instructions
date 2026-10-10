@@ -1,0 +1,26 @@
+{
+  "Comment": "V005 must stay silent: folding any of these Pass states into the previous state would change meaning",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Get",
+  "States": {
+    "Get": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "Arguments": {"TableName": "t", "Key": {"pk": {"S": "a"}}},
+      "Assign": {"item": "{% $states.result.Item %}"},
+      "Output": "{% $states.result.Item %}",
+      "Next": "ReadsPredVar"
+    },
+    "ReadsPredVar": {"Type": "Pass", "Assign": {"price": "{% $number($item.price.N) %}"}, "Next": "Touch"},
+    "Touch": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:s3:listBuckets", "Output": "{% $states.input %}", "Next": "ReadsInput"},
+    "ReadsInput": {"Type": "Pass", "Assign": {"id": "{% $states.input.pk.S %}"}, "Next": "Fan"},
+    "Fan": {
+      "Type": "Map",
+      "Items": "{% $states.input.list.L %}",
+      "ItemProcessor": {"StartAt": "One", "States": {"One": {"Type": "Pass", "Output": "{% 1 %}", "End": true}}},
+      "Next": "SumMap"
+    },
+    "SumMap": {"Type": "Pass", "Assign": {"total": "{% $sum($states.input) %}"}, "Next": "Done"},
+    "Done": {"Type": "Succeed", "Output": "{% {'price': $price, 'id': $id, 'total': $total} %}"}
+  }
+}

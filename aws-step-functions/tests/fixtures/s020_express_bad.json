@@ -1,0 +1,63 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Sync",
+  "States": {
+    "Sync": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Next": "Wait"
+    },
+    "Wait": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": {
+          "t": "{% $states.context.Task.Token %}"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "Next": "Act"
+    },
+    "Act": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:us-east-1:123456789012:activity:a",
+      "Next": "Dist"
+    },
+    "Dist": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "EXPRESS"
+        },
+        "StartAt": "Inner",
+        "States": {
+          "Inner": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "Next": "Par"
+    },
+    "Par": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "Child",
+          "States": {
+            "Child": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::states:startExecution.sync:2",
+              "End": true
+            }
+          }
+        }
+      ],
+      "End": true
+    }
+  },
+  "TimeoutSeconds": 600
+}

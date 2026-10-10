@@ -1,0 +1,3 @@
+{"QueryLanguage": "JSONata", "StartAt": "Pick", "States": {
+  "Pick": {"Type": "Choice", "Choices": 5, "Default": "Done"},
+  "Done": {"Type": "Succeed"}}}

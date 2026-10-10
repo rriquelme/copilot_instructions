@@ -1,0 +1,4 @@
+{"QueryLanguage":"JSONata","StartAt":"List","States":{
+ "List":{"Type":"Task","Resource":"arn:aws:states:::aws-sdk:s3:listObjectsV2","Arguments":{"Bucket":"b","ContinuationToken":"{% $token %}"},"Assign":{"token":"{% $states.result.NextContinuationToken %}"},"Next":"More?"},
+ "More?":{"Type":"Choice","Choices":[{"Condition":"{% $exists($token) %}","Next":"List"}],"Default":"Done"},
+ "Done":{"Type":"Succeed"}}}

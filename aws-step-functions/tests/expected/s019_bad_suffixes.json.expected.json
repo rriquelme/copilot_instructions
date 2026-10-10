@@ -1,0 +1,8 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S019", "/States/DdbWait/Resource"],
+  ["ERROR", "S019", "/States/EcsSync2/Resource"],
+  ["ERROR", "S019", "/States/HttpWait/Resource"],
+  ["ERROR", "S019", "/States/LambdaSync/Resource"],
+  ["ERROR", "S019", "/States/SdkSync/Resource"],
+  ["ERROR", "S019", "/States/SnsSync/Resource"]
+]}

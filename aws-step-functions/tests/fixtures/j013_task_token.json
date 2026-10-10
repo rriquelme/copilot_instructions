@@ -1,0 +1,34 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Wait",
+  "States": {
+    "Wait": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "HeartbeatSeconds": 60,
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": {
+          "token": "{% $states.context.Task.Token %}"
+        }
+      },
+      "Next": "Bad"
+    },
+    "Bad": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": {
+          "token": "{% $states.context.Task.Token %}"
+        }
+      },
+      "Next": "Typo"
+    },
+    "Typo": {
+      "Type": "Pass",
+      "Output": "{% $states.context.Task.token %}",
+      "End": true
+    }
+  }
+}

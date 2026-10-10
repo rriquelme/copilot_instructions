@@ -1,0 +1,15 @@
+{"StartAt":"C","States":{
+ "C":{"Type":"Choice","Choices":[
+   {"Variable":"$.n","NumericGreaterThanEquals":10.5,"Next":"D"},
+   {"Variable":"$$.Execution.Input.s","StringMatches":"log-*.txt","Next":"D"},
+   {"Variable":"$.t","TimestampLessThan":"2025-01-31T10:00:00+02:00","Next":"D"},
+   {"Variable":"$.t","TimestampEquals":"2025-01-31T10:00:00.123Z","Next":"D"},
+   {"Variable":"$.x","NumericEqualsPath":"$.y","Next":"D"},
+   {"Variable":"$['weird key']","IsString":true,"Next":"D"},
+   {"Variable":"$.tpl","StringEquals":"__TPL__","Next":"D"},
+   {"Variable":"$.tpl2","NumericEquals":"__TPL__","Next":"D"},
+   {"And":[{"Variable":"$.a","IsPresent":true},
+           {"Or":[{"Variable":"$.b","BooleanEquals":false},{"Not":{"Variable":"$.c","IsNull":true}}]}],"Next":"D"},
+   {"Not":{"Variable":"$.items[0].id","StringEquals":"x"},"Next":"D"}
+ ],"Default":"D"},
+ "D":{"Type":"Succeed"}}}

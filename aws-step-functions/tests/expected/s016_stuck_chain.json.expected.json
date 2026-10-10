@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S016", "/States/Into"],
+  ["ERROR", "S016", "/States/Spin"]
+]}

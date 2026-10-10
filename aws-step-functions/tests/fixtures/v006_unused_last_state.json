@@ -1,0 +1,3 @@
+{"QueryLanguage":"JSONata","StartAt":"Get","States":{
+ "Get":{"Type":"Pass","Assign":{"orderId":"{% $states.input.id %}"},"Next":"Use"},
+ "Use":{"Type":"Pass","Output":{"id":"{% $orderId %}"},"Assign":{"done":true},"End":true}}}

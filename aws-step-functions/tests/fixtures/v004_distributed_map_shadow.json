@@ -1,0 +1,21 @@
+{
+  "Comment": "A Distributed Map child that assigns its own $limit (V004 name clash) and reads it afterwards: no V003",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Init",
+  "States": {
+    "Init": {"Type": "Pass", "Assign": {"limit": 3}, "Next": "Each"},
+    "Each": {
+      "Type": "Map",
+      "Items": "{% [1, 2, $limit] %}",
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "EXPRESS"},
+        "StartAt": "Work",
+        "States": {
+          "Work": {"Type": "Pass", "Assign": {"limit": 5}, "Next": "Use"},
+          "Use": {"Type": "Pass", "Output": {"l": "{% $limit %}"}, "End": true}
+        }
+      },
+      "End": true
+    }
+  }
+}

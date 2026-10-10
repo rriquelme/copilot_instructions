@@ -1,0 +1,26 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Resources": {
+    "SM": {
+      "Type": "AWS::StepFunctions::StateMachine",
+      "Properties": {
+        "DefinitionSubstitutions": {"FnArn": {"Fn::GetAtt": ["Fn", "Arn"]}, "Table": {"Ref": "T"}},
+        "Definition": {
+          "QueryLanguage": "JSONata",
+          "StartAt": "Call",
+          "States": {
+            "Call": {"Type": "Task", "Resource": "${FnArn}", "Arguments": {"x": "{% $states.input.x %}"}, "Retry": [{"ErrorEquals": ["Lambda.ServiceException"]}], "Next": "Put"},
+            "Put": {"Type": "Task", "Resource": "arn:${AWS::Partition}:states:::dynamodb:putItem", "Arguments": {"TableName": "${Table}", "Item": {"pk": {"S": "{% $states.input.id %}"}}}, "Next": "Wait"},
+            "Wait": {"Type": "Wait", "Seconds": 5, "End": true}
+          }
+        }
+      }
+    },
+    "SM2": {
+      "Type": "AWS::StepFunctions::StateMachine",
+      "Properties": {
+        "DefinitionString": {"Fn::Sub": "{\"StartAt\":\"A\",\"States\":{\"A\":{\"Type\":\"Task\",\"Resource\":\"arn:aws:states:::lambda:invoke\",\"Parameters\":{\"FunctionName\":\"${Fn.Arn}\",\"Payload.$\":\"$\"},\"Retry\":[{\"ErrorEquals\":[\"Lambda.ServiceException\"]}],\"Next\":\"Nope\"}}}"}
+      }
+    }
+  }
+}

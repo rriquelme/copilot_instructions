@@ -1,0 +1,12 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Iso",
+  "States": {
+    "Iso": {"Type": "Task", "Resource": "arn:aws-iso:states:::aws-sdk:s3:getObject", "Arguments": {"Bucket": "b", "Key": "k"}, "Next": "IsoB"},
+    "IsoB": {"Type": "Task", "Resource": "arn:aws-iso-b:states:::aws-sdk:s3:getObject", "Arguments": {"Bucket": "b", "Key": "k"}, "Next": "IsoE"},
+    "IsoE": {"Type": "Task", "Resource": "arn:aws-iso-e:states:::aws-sdk:s3:getObject", "Arguments": {"Bucket": "b", "Key": "k"}, "Next": "IsoF"},
+    "IsoF": {"Type": "Task", "Resource": "arn:aws-iso-f:states:::aws-sdk:s3:getObject", "Arguments": {"Bucket": "b", "Key": "k"}, "Next": "Eusc"},
+    "Eusc": {"Type": "Task", "Resource": "arn:aws-eusc:states:::aws-sdk:s3:getObject", "Arguments": {"Bucket": "b", "Key": "k"}, "Next": "Unknown"},
+    "Unknown": {"Type": "Task", "Resource": "arn:aws-mars:states:::aws-sdk:s3:getObject", "Arguments": {"Bucket": "b", "Key": "k"}, "End": true}
+  }
+}

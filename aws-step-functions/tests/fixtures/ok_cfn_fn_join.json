@@ -1,0 +1,21 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Resources": {
+    "Fn": {"Type": "AWS::Lambda::Function", "Properties": {"Runtime": "python3.12"}},
+    "SM": {
+      "Type": "AWS::StepFunctions::StateMachine",
+      "Properties": {
+        "RoleArn": {"Fn::GetAtt": ["Role", "Arn"]},
+        "DefinitionString": {"Fn::Join": ["", [
+          "{\"StartAt\":\"Call\",\"States\":{\"Call\":{\"Type\":\"Task\",\"Resource\":\"arn:",
+          {"Ref": "AWS::Partition"},
+          ":states:::lambda:invoke\",\"Parameters\":{\"FunctionName\":\"",
+          {"Fn::GetAtt": ["Fn", "Arn"]},
+          "\",\"Payload.$\":\"$\"},\"Retry\":[{\"ErrorEquals\":[\"Lambda.ServiceException\",\"Lambda.AWSLambdaException\",\"Lambda.SdkClientException\",\"Lambda.TooManyRequestsException\"]}],\"TimeoutSeconds\":",
+          {"Ref": "Timeout"},
+          ",\"Next\":\"Done\"},\"Done\":{\"Type\":\"Succeed\"}}}"
+        ]]}
+      }
+    }
+  }
+}

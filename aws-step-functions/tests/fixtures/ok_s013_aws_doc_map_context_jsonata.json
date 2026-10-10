@@ -1,0 +1,27 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "ExampleMapState",
+  "States": {
+    "ExampleMapState": {
+      "Type": "Map",
+      "ItemSelector": {
+        "ContextIndex": "{% $states.context.Map.Item.Index %}",
+        "ContextValue": "{% $states.context.Map.Item.Value %}",
+        "ContextSource": "{% $states.context.Map.Item.Source %}"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "INLINE"
+        },
+        "StartAt": "TestPass",
+        "States": {
+          "TestPass": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

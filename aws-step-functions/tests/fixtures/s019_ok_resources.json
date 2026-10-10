@@ -1,0 +1,104 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Lambda",
+  "States": {
+    "Lambda": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "f"
+      },
+      "Output": "{% $states.result.Payload %}",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "LambdaArn"
+    },
+    "LambdaArn": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:123456789012:function:fn:prod",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Activity"
+    },
+    "Activity": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:us-gov-west-1:123456789012:activity:approve",
+      "Next": "Child"
+    },
+    "Child": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution.sync:2",
+      "Next": "Ecs"
+    },
+    "Ecs": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.waitForTaskToken",
+      "Arguments": {
+        "t": "{% $states.context.Task.Token %}"
+      },
+      "TimeoutSeconds": 60,
+      "Next": "Glue"
+    },
+    "Glue": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Next": "Sdk"
+    },
+    "Sdk": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Next": "Http"
+    },
+    "Http": {
+      "Type": "Task",
+      "Resource": "arn:aws-cn:states:::http:invoke",
+      "Next": "Unknown"
+    },
+    "Unknown": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sagemaker:createTrainingJob.sync",
+      "Next": "SqsWait"
+    },
+    "SqsWait": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": {
+          "t": "{% $states.context.Task.Token %}"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "Next": "Athena"
+    },
+    "Athena": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "End": true
+    }
+  }
+}

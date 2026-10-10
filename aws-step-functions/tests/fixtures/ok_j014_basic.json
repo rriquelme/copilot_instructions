@@ -1,0 +1,21 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "P",
+  "States": {
+    "P": {
+      "Type": "Pass",
+      "Output": {
+        "k0": "{% $substring($states.input.s, 0, 3) %}",
+        "k1": "{% $uuid() %}",
+        "k2": "{% $millis() %}",
+        "k3": "{% $now() %}",
+        "k4": "{% $range(0, 10, 2) %}",
+        "k5": "{% $hash($states.input.s, 'SHA-256') %}",
+        "k6": "{% $partition($states.input.a, 2) %}",
+        "k7": "{% $parse('{\"a\":1}') %}",
+        "k8": "{% $random() %}"
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{"QueryLanguage":"JSONata", "StartAt":"M","States":{
+ "M":{"Type":"Map","Items":"{% $states.input.items %}","ItemProcessor":{"StartAt":"W","States":{
+    "W":{"Type":"Wait","Seconds":1,"Next":"Y"},
+    "Y":{"Type":"Pass","Next":"W"}}},"End":true}}}

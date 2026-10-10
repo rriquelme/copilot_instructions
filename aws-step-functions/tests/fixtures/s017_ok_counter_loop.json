@@ -1,0 +1,20 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Init",
+  "States": {
+    "Init": {"Type": "Pass", "Assign": {"i": 0, "items": "{% $states.input.batches %}"}, "Next": "HasMore"},
+    "HasMore": {
+      "Type": "Choice",
+      "Choices": [{"Condition": "{% $i < $count($items) %}", "Next": "Send"}],
+      "Default": "Done"
+    },
+    "Send": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:sqs:sendMessageBatch",
+      "Arguments": {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q", "Entries": "{% $items[$i] %}"},
+      "Assign": {"i": "{% $i + 1 %}"},
+      "Next": "HasMore"
+    },
+    "Done": {"Type": "Succeed"}
+  }
+}

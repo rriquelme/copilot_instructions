@@ -1,0 +1,11 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "V007", "/States/A/Assign/$orderId"],
+  ["ERROR", "V007", "/States/A/Assign/1st"],
+  ["ERROR", "V007", "/States/A/Assign/my var"],
+  ["ERROR", "V007", "/States/A/Assign/order.total"],
+  ["ERROR", "V007", "/States/A/Assign/states"],
+  ["ERROR", "V007", "/States/A/Catch/0/Assign/$err"],
+  ["ERROR", "V007", "/States/C/Choices/0/Assign/route-name"],
+  ["INFO", "P005", "/States/A"],
+  ["WARNING", "V006", "/States/A/Assign/ok_name"]
+]}

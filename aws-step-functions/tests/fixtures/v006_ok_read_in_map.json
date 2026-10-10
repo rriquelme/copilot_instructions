@@ -1,0 +1,7 @@
+{"QueryLanguage":"JSONata","StartAt":"Init","States":{
+ "Init":{"Type":"Pass","Assign":{"prefix":"x-","total":0},"Next":"Loop"},
+ "Loop":{"Type":"Map","Items":"{% $states.input.items %}","ItemProcessor":{"StartAt":"Inner","States":{
+   "Inner":{"Type":"Pass","Assign":{"tmp":"{% $prefix & $states.input %}"},"Next":"Inner2"},
+   "Inner2":{"Type":"Pass","Output":"{% $tmp %}","End":true}}},
+   "Assign":{"total":"{% $total + $count($states.result) %}"},"Next":"Out"},
+ "Out":{"Type":"Pass","Output":{"t":"{% $total %}"},"End":true}}}

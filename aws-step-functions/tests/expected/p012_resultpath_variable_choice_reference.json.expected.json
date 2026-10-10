@@ -1,0 +1,9 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "P012", "/States/Call/Catch/0/ResultPath"],
+  ["ERROR", "P012", "/States/Call/ResultPath"],
+  ["ERROR", "P012", "/States/Check/Choices/0/Variable"],
+  ["ERROR", "P012", "/States/Check/Choices/1/Variable"],
+  ["ERROR", "P012", "/States/Check/Choices/2/StringEqualsPath"],
+  ["ERROR", "P012", "/States/Check/Choices/3/And/0/Variable"],
+  ["INFO", "J000", "/QueryLanguage"]
+]}

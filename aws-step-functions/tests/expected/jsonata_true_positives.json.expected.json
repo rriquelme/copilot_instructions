@@ -1,0 +1,9 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J005", "/States/P/Output/unknownFn"],
+  ["ERROR", "J007", "/States/P/Output/andAnd"],
+  ["ERROR", "J007", "/States/P/Output/doubleEquals"],
+  ["ERROR", "J014", "/States/P/Output/arityDivision"],
+  ["ERROR", "J014", "/States/P/Output/arityRegexClass"],
+  ["ERROR", "V001", "/States/P/Output/unboundVar"],
+  ["ERROR", "V002", "/States/P/Assign/later"]
+]}

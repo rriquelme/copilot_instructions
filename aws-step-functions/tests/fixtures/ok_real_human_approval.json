@@ -1,0 +1,37 @@
+{
+  "Comment": "Human approval: send the task token by email through a Lambda, wait for SendTaskSuccess/Failure",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Request approval",
+  "States": {
+    "Request approval": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Arguments": {
+        "FunctionName": "send-approval-email",
+        "Payload": {"token": "{% $states.context.Task.Token %}", "request": "{% $states.input %}", "executionId": "{% $states.context.Execution.Id %}"}
+      },
+      "TimeoutSeconds": 86400,
+      "HeartbeatSeconds": 3600,
+      "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2}],
+      "Catch": [
+        {"ErrorEquals": ["States.Timeout", "States.HeartbeatTimeout"], "Next": "Approval timed out"},
+        {"ErrorEquals": ["Rejected"], "Output": "{% {'reason': $states.errorOutput.Cause} %}", "Next": "Rejected"}
+      ],
+      "Assign": {"approver": "{% $states.result.approver %}"},
+      "Output": "{% $merge([$states.input, {'approvedBy': $states.result.approver}]) %}",
+      "Next": "Wait for go-live"
+    },
+    "Wait for go-live": {"Type": "Wait", "Timestamp": "{% $states.input.goLive %}", "Next": "Record decision"},
+    "Record decision": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Arguments": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/approvals",
+        "MessageBody": "{% $string({'requestId': $states.input.requestId, 'approver': $approver}) %}"
+      },
+      "End": true
+    },
+    "Approval timed out": {"Type": "Fail", "Error": "ApprovalTimeout", "Cause": "Nobody approved the request within 24 hours"},
+    "Rejected": {"Type": "Fail", "Error": "Rejected", "Cause": "{% $states.input.reason %}"}
+  }
+}

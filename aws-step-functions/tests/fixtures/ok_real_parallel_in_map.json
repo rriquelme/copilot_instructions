@@ -1,0 +1,72 @@
+{
+  "Comment": "Inline Map over customers; each item runs a Parallel that enriches the customer from two sources",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Load customers",
+  "States": {
+    "Load customers": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:dynamodb:query",
+      "Arguments": {
+        "TableName": "customers",
+        "KeyConditionExpression": "region = :r",
+        "ExpressionAttributeValues": {":r": {"S": "{% $states.input.region %}"}}
+      },
+      "Assign": {"region": "{% $states.input.region %}"},
+      "Output": "{% $states.result.Items %}",
+      "Next": "Enrich each"
+    },
+    "Enrich each": {
+      "Type": "Map",
+      "Items": "{% $states.input %}",
+      "MaxConcurrency": 10,
+      "ItemSelector": {"id": "{% $states.context.Map.Item.Value.id.S %}", "position": "{% $states.context.Map.Item.Index %}", "region": "{% $region %}"},
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "INLINE"},
+        "StartAt": "Lookups",
+        "States": {
+          "Lookups": {
+            "Type": "Parallel",
+            "Branches": [
+              {
+                "StartAt": "Orders",
+                "States": {
+                  "Orders": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::dynamodb:query",
+                    "Arguments": {
+                      "TableName": "orders",
+                      "KeyConditionExpression": "customerId = :c",
+                      "ExpressionAttributeValues": {":c": {"S": "{% $states.input.id %}"}}
+                    },
+                    "Output": "{% {'orders': $states.result.Count} %}",
+                    "End": true
+                  }
+                }
+              },
+              {
+                "StartAt": "Score",
+                "States": {
+                  "Score": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::lambda:invoke",
+                    "Arguments": {"FunctionName": "score-customer", "Payload": "{% $states.input %}"},
+                    "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2}],
+                    "Output": "{% {'score': $states.result.Payload.score} %}",
+                    "End": true
+                  }
+                }
+              }
+            ],
+            "Retry": [{"ErrorEquals": ["States.BranchFailed"], "MaxAttempts": 1}],
+            "Output": "{% $merge([$states.input, $states.result[0], $states.result[1]]) %}",
+            "End": true
+          }
+        }
+      },
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Enrichment failed"}],
+      "Output": "{% {'region': $region, 'customers': $states.result} %}",
+      "End": true
+    },
+    "Enrichment failed": {"Type": "Fail", "Error": "EnrichmentFailed"}
+  }
+}

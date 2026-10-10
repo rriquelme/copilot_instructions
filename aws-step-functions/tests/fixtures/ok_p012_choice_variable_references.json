@@ -1,0 +1,19 @@
+{
+  "StartAt": "Init",
+  "States": {
+    "Init": {"Type": "Pass", "Assign": {"limit": 3, "cfg": {"mode": "fast"}}, "ResultPath": "$.init", "Next": "Check"},
+    "Check": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$$.Execution.Input.mode", "StringEquals": "fast", "Next": "Done"},
+        {"Variable": "$limit", "NumericGreaterThanPath": "$.count", "Next": "Done"},
+        {"Variable": "$cfg.mode", "StringEqualsPath": "$$.Execution.Input.mode", "Next": "Done"},
+        {"Variable": "$.items[0].x", "StringEquals": "a", "Next": "Done"},
+        {"Variable": "$['odd key']", "IsPresent": true, "Next": "Done"},
+        {"Variable": "$.a", "NumericLessThanPath": "$limit", "Next": "Done"}
+      ],
+      "Default": "Done"
+    },
+    "Done": {"Type": "Succeed"}
+  }
+}

@@ -1,0 +1,3 @@
+{"QueryLanguage":"JSONata","StartAt":"A","States":{
+ "A":{"Type":"Pass","Assign":{"n":2,"label":"L"},"Next":"B"},
+ "B":{"Type":"Pass","Output":"{% $map([1,2], function($v){ $v * $n }) & ' $label' %}","End":true}}}

@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S019", "/States/MissingColons/Resource"],
+  ["ERROR", "S019", "/States/NotArn/Resource"],
+  ["ERROR", "S019", "/States/SdkNoAction/Resource"],
+  ["ERROR", "S019", "/States/StateMachineArn/Resource"],
+  ["WARNING", "S019", "/States/BadPartition/Resource"]
+]}

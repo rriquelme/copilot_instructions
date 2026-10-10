@@ -1,0 +1,6 @@
+{"StartAt": "A", "States": {
+%{ for i, s in steps ~}
+  "${s}": {"Type": "Pass", ${i < length(steps) - 1 ? "\"Next\": \"x\"" : "\"End\": true"}}
+  ${i < length(steps) - 1 ? "," : ""}
+%{ endfor ~}
+}}

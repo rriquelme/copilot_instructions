@@ -1,0 +1,4 @@
+{"QueryLanguage":"JSONata", "StartAt":"Call","States":{
+ "Call":{"Type":"Task","Resource":"arn:aws:states:::lambda:invoke","Arguments":{"FunctionName":"f","Payload":"{% $states.input %}"},
+   "Catch":[{"ErrorEquals":["States.ALL"],"Next":"Log"}],"End":true},
+ "Log":{"Type":"Pass","Next":"Call"}}}

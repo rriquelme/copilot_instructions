@@ -1,0 +1,15 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "P",
+  "States": {
+    "P": {
+      "Type": "Pass",
+      "Output": {
+        "k0": "{% $map($states.input.items, function($v, $i) { {'a': $v, 'b': [$i, 1]} }) %}",
+        "k1": "{% $reduce($states.input.n, function($acc, $v) { $acc + $v }, 0) %}",
+        "k2": "{% $sort($states.input.a, function($l, $r) { $l > $r }) %}"
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "CfnPartition",
+  "States": {
+    "CfnPartition": {
+      "Type": "Task",
+      "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "f"
+      },
+      "Output": "{% $states.result.Payload %}",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Tpl"
+    },
+    "Tpl": {
+      "Type": "Task",
+      "Resource": "__TPL__",
+      "Next": "TplRegion"
+    },
+    "TplRegion": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${region}:${account}:function:${fn}",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "AngleActivity"
+    },
+    "AngleActivity": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:<region>:<account>:activity:<name>",
+      "Next": "TplAction"
+    },
+    "TplAction": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:${svc}:${action}",
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "P004", "/States/T/Retry/1/MaxDelaySeconds"],
+  ["ERROR", "P004", "/States/T/Retry/2/MaxDelaySeconds"],
+  ["WARNING", "P004", "/States/T/Retry/0/MaxDelaySeconds"]
+]}

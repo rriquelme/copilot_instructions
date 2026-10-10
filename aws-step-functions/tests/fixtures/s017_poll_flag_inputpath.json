@@ -1,0 +1,13 @@
+{
+  "StartAt": "Submit",
+  "States": {
+    "Submit": {"Type": "Task", "Resource": "arn:aws:lambda:us-east-1:123456789012:function:SubmitJob", "ResultPath": "$.jobId", "Next": "GetStatus"},
+    "GetStatus": {"Type": "Task", "Resource": "arn:aws:lambda:us-east-1:123456789012:function:CheckJob", "InputPath": "$.jobId", "ResultPath": "$.job", "Next": "IsDone"},
+    "IsDone": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.job.finished", "BooleanEquals": true, "Next": "Done"}],
+      "Default": "GetStatus"
+    },
+    "Done": {"Type": "Succeed"}
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "Comment": "JSONPath states reading variables in every field kind that accepts a path",
+  "StartAt": "Init",
+  "States": {
+    "Init": {
+      "Type": "Pass",
+      "Assign": {"items.$": "$.items", "status.$": "$.status", "expected": "DONE", "delay": 1, "error": "Bad", "cause": "why", "customer.$": "$.customer"},
+      "Next": "Route"
+    },
+    "Route": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$status", "StringEqualsPath": "$expected", "Next": "Wait"},
+        {"Not": {"Variable": "$customer.name", "IsPresent": true}, "Next": "Fail"}
+      ],
+      "Default": "Each"
+    },
+    "Wait": {"Type": "Wait", "SecondsPath": "$delay", "Next": "Each"},
+    "Each": {
+      "Type": "Map",
+      "ItemsPath": "$items",
+      "ItemSelector": {"item.$": "$$.Map.Item.Value", "who.$": "$customer.name"},
+      "ItemProcessor": {
+        "StartAt": "Greet",
+        "States": {
+          "Greet": {"Type": "Pass", "Parameters": {"text.$": "States.Format('Hello {} - cost in $USD', $customer.name)"}, "End": true}
+        }
+      },
+      "ResultSelector": {"count.$": "States.ArrayLength($)", "status.$": "$status"},
+      "ResultPath": "$.result",
+      "Next": "Done"
+    },
+    "Done": {"Type": "Succeed"},
+    "Fail": {"Type": "Fail", "ErrorPath": "$error", "CausePath": "States.Format('{}: {}', $error, $cause)"}
+  }
+}

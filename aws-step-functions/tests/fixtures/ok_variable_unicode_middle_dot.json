@@ -1,0 +1,2 @@
+{"QueryLanguage":"JSONata","StartAt":"A","States":{"A":{"Type":"Pass","Assign":{"col·lecció":"{% $states.input.items %}"},"Next":"B"},
+"B":{"Type":"Pass","Output":"{% $count($col·lecció) %}","End":true}}}

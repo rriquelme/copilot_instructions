@@ -1,0 +1,9 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Get",
+  "States": {
+    "Get": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:s3:listBuckets", "Output": "{% $states.result.Buckets %}", "Next": "Stamp"},
+    "Stamp": {"Type": "Pass", "Assign": {"runId": "{% $uuid() %}", "attempt": 0}, "Next": "Done"},
+    "Done": {"Type": "Succeed", "Output": "{% {'runId': $runId, 'attempt': $attempt} %}"}
+  }
+}

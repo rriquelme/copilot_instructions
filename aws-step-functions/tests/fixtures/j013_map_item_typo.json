@@ -1,0 +1,24 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "M",
+  "States": {
+    "M": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ItemSelector": {
+        "v": "{% $states.context.Map.Item.Val %}",
+        "i": "{% $states.context.Map.Items.Index %}"
+      },
+      "ItemProcessor": {
+        "StartAt": "P",
+        "States": {
+          "P": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

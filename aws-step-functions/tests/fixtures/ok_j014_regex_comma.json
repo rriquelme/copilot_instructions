@@ -1,0 +1,14 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "P",
+  "States": {
+    "P": {
+      "Type": "Pass",
+      "Output": {
+        "k0": "{% $replace($states.input.s, /a,b/, 'x') %}",
+        "k1": "{% $match($states.input.s, /[0-9]{1,3}/) %}"
+      },
+      "End": true
+    }
+  }
+}

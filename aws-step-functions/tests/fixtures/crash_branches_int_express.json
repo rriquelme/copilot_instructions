@@ -1,0 +1,3 @@
+{"QueryLanguage": "JSONata", "StartAt": "Fan", "States": {
+  "Fan": {"Type": "Parallel", "Branches": 3, "Next": "Done"},
+  "Done": {"Type": "Succeed"}}}

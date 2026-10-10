@@ -1,0 +1,5 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "/States/GetOrder/Next"],
+  ["ERROR", "S003", "/States/ChargeOrder"],
+  ["ERROR", "S003", "/States/Done"]
+]}

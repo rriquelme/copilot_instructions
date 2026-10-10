@@ -1,0 +1,3 @@
+{"QueryLanguage":"JSONata","StartAt":"A","States":{
+"A":{"Type":"Pass","Assign":{"𝑥":1,"café":2,"ǅx":3,"x·y":4,"Ⅻ":5,"a℘":6},"Next":"B"},
+"B":{"Type":"Pass","Output":{"a":"{% $𝑥 %}","b":"{% $café %}","c":"{% $ǅx %}","d":"{% $x·y %}","e":"{% $Ⅻ %}","f":"{% $a℘ %}"},"End":true}}}

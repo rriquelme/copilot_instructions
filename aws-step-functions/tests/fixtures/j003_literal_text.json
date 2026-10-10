@@ -1,0 +1,36 @@
+{
+  "Comment": "Comments may mention {% expressions %} freely.",
+  "QueryLanguage": "JSONata",
+  "StartAt": "C",
+  "States": {
+    "C": {
+      "Type": "Choice",
+      "Comment": "routes on {% $states.input.n > 1 %}",
+      "Choices": [
+        {"Comment": "true when {% $states.input.n > 1 %} holds", "Condition": "{% $states.input.n > 1 %}", "Next": "T"}
+      ],
+      "Default": "T"
+    },
+    "T": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:ses:createTemplate",
+      "Arguments": {
+        "Template": {
+          "TemplateName": "t",
+          "HtmlPart": "<p>{% raw %}{{name}}{% endraw %}</p>",
+          "TextPart": "discount up to 50%}",
+          "SubjectPart": "Hello {% $states.input.name %}",
+          "Comment": "a nested Comment {% is %} skipped too"
+        },
+        "Payload": {"Comment": "{% $nope %}"},
+        "Tags": [
+          {"Key": "leadingSpace", "Value": " {% $states.input.a %}"},
+          {"Key": "trailingSpace", "Value": "{% $states.input.a %} "},
+          {"Key": "unterminated", "Value": "{% $states.input.a"},
+          {"Key": "ok", "Value": "{% $states.input.a %}"}
+        ]
+      },
+      "End": true
+    }
+  }
+}

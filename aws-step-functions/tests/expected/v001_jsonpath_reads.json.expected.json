@@ -1,0 +1,10 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "V001", "/States/Route/Choices/0/Variable"],
+  ["ERROR", "V001", "/States/Use/InputPath"],
+  ["ERROR", "V001", "/States/Use/Parameters/id.$"],
+  ["ERROR", "V001", "/States/Use/Parameters/msg.$"],
+  ["ERROR", "V002", "/States/Late/OutputPath"],
+  ["ERROR", "V002", "/States/Route/Choices/1/And/0/StringEqualsPath"],
+  ["ERROR", "V002", "/States/Route/Choices/1/And/1/Not/Variable"],
+  ["INFO", "J000", "/QueryLanguage"]
+]}

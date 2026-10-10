@@ -1,0 +1,43 @@
+{
+  "Resources": {
+    "OrdersTable0A1B2C3D": {"Type": "AWS::DynamoDB::Table", "Properties": {"KeySchema": [{"AttributeName": "pk", "KeyType": "HASH"}]}},
+    "HandlerServiceRole1234ABCD": {"Type": "AWS::IAM::Role", "Properties": {"AssumeRolePolicyDocument": {"Statement": [{"Action": "sts:AssumeRole", "Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}}]}}},
+    "Handler886CB40B": {"Type": "AWS::Lambda::Function", "Properties": {"Handler": "index.handler", "Runtime": "nodejs20.x", "Role": {"Fn::GetAtt": ["HandlerServiceRole1234ABCD", "Arn"]}}},
+    "OrderFlowRoleDEADBEEF": {"Type": "AWS::IAM::Role", "Properties": {"AssumeRolePolicyDocument": {"Statement": [{"Action": "sts:AssumeRole", "Effect": "Allow", "Principal": {"Service": "states.amazonaws.com"}}]}}},
+    "OrderFlow6C968CA5": {
+      "Type": "AWS::StepFunctions::StateMachine",
+      "Properties": {
+        "RoleArn": {"Fn::GetAtt": ["OrderFlowRoleDEADBEEF", "Arn"]},
+        "DefinitionString": {"Fn::Join": ["", [
+          "{\"StartAt\":\"Invoke\",\"States\":{\"Invoke\":{\"Next\":\"Store\",\"Retry\":[{\"ErrorEquals\":[\"Lambda.ClientExecutionTimeoutException\",\"Lambda.ServiceException\",\"Lambda.AWSLambdaException\",\"Lambda.SdkClientException\"],\"IntervalSeconds\":2,\"MaxAttempts\":6,\"BackoffRate\":2}],\"Type\":\"Task\",\"OutputPath\":\"$.Payload\",\"Resource\":\"arn:",
+          {"Ref": "AWS::Partition"},
+          ":states:::lambda:invoke\",\"Parameters\":{\"FunctionName\":\"",
+          {"Fn::GetAtt": ["Handler886CB40B", "Arn"]},
+          "\",\"Payload.$\":\"$\"}},\"Store\":{\"End\":true,\"Type\":\"Task\",\"Resource\":\"arn:",
+          {"Ref": "AWS::Partition"},
+          ":states:::dynamodb:putItem\",\"Parameters\":{\"Item\":{\"pk\":{\"S.$\":\"$.id\"}},\"TableName\":\"",
+          {"Ref": "OrdersTable0A1B2C3D"},
+          "\"}}}}"
+        ]]},
+        "StateMachineType": "STANDARD"
+      },
+      "DependsOn": ["OrderFlowRoleDEADBEEF"]
+    },
+    "CleanupFlowA1B2C3D4": {
+      "Type": "AWS::StepFunctions::StateMachine",
+      "Properties": {
+        "RoleArn": {"Fn::GetAtt": ["OrderFlowRoleDEADBEEF", "Arn"]},
+        "DefinitionString": {"Fn::Join": ["", [
+          "{\"StartAt\":\"Scan\",\"States\":{\"Scan\":{\"Next\":\"Wait\",\"Type\":\"Task\",\"Resource\":\"arn:",
+          {"Ref": "AWS::Partition"},
+          ":states:::aws-sdk:dynamodb:scan\",\"Parameters\":{\"TableName\":\"",
+          {"Ref": "OrdersTable0A1B2C3D"},
+          "\"}},\"Wait\":{\"Type\":\"Wait\",\"Seconds\":",
+          {"Ref": "WaitSeconds"},
+          ",\"Next\":\"Scann\"}}}"
+        ]]}
+      }
+    }
+  },
+  "Parameters": {"WaitSeconds": {"Type": "Number"}, "BootstrapVersion": {"Type": "AWS::SSM::Parameter::Value<String>", "Default": "/cdk-bootstrap/hnb659fds/version"}}
+}

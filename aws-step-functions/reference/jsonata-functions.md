@@ -129,7 +129,7 @@ Anonymous function syntax is `function($x) { $x + 1 }`. Chain with `~>`:
 | Logic | `and` `or` (no `&&`, `\|\|`, `!`) |
 | String concat | `&` (`'id-' & $states.input.id`; non-strings need `$string()`) |
 | Conditional | `cond ? a : b` |
-| Default | `a ?? b` (b when a is undefined), `a ?: b` (b when a is falsy) |
+| Default | `$exists(a) ? a : b` (b when a is undefined), `a ? a : b` (b when a is falsy). Not `a ?? b` / `a ?: b`: those are JSONata 2.1+, Step Functions runs 2.0.6 |
 | Binding | `$x := expr` inside a block `( $x := 1; $x + 1 )` |
 | Chain | `expr ~> $fn(args)` |
 | Path | `.` map, `[ ]` filter/index, `^( )` sort, `{ }` group, `*` wildcard, `**` descendants, `%` parent, `#$i` position, `@$v` context |
@@ -159,7 +159,7 @@ Regex literals: `/pattern/flags`, flags `i` and `m` only.
 | `$unique` | `$distinct` |
 | `$max(a, b)` | `$max([a, b])` |
 | `$mod`, `$pow`, `$trunc` | `a % b`, `$power`, `$floor` |
-| `$if`, `$coalesce`, `$default`, `$ifNull` | `c ? a : b`, `a ?? b` |
+| `$if`, `$coalesce`, `$default`, `$ifNull` | `c ? a : b`, `$exists(a) ? a : b` |
 | `$parseJson`, `$fromJson`, `$eval` | `$parse(str)` |
 | `$toJson` | `$string(obj)` |
 | `$date`, `$today`, `$timestamp`, `$formatDate` | `$now()`, `$millis()`, `$fromMillis(ms, picture)` |
@@ -168,7 +168,7 @@ Regex literals: `/pattern/flags`, flags `i` and `m` only.
 | `$mergeObjects`, `$assign`, `$extend` | `$merge([a, b])` |
 | `$entries`, `$values` | `$each(obj, function($v, $k) {...})`, `$spread(obj)` |
 | `$$.Execution.Id` | `$states.context.Execution.Id` |
-| `$.field`, `$input.field` | `$states.input.field` |
+| `$.field`, `$input.field` | `$states.input.field` (`$.price` is fine inside `items[...]`, `items^(...)`, `items{...}`, where `$` is the current item) |
 | `$result.x` | `$states.result.x` (Output/Assign of Task, Map, Parallel only) |
 | `States.Format('a{}', x)` | `'a' & $string(x)` |
 | `x == 1`, `a && b`, `!a` | `x = 1`, `a and b`, `$not(a)` |
@@ -176,8 +176,8 @@ Regex literals: `/pattern/flags`, flags `i` and `m` only.
 ## Runtime failure modes (all raise `States.QueryEvaluationError`)
 
 - **Undefined result.** `$states.input.missing` yields nothing, and a field cannot
-  hold "nothing". Guard optional fields: `$states.input.note ?? null`,
-  `$exists($x) ? $x : 0`.
+  hold "nothing". Guard optional fields:
+  `$exists($states.input.note) ? $states.input.note : null`, `$exists($x) ? $x : 0`.
 - **Type mismatch.** `Seconds`, `TimeoutSeconds`, `MaxConcurrency` need integers;
   `Condition` needs a boolean; `Timestamp` needs an RFC3339 string. Convert
   with `$number()`, `$boolean()`, `$string()`.

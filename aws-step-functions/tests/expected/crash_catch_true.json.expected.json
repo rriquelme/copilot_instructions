@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S012", "/States/Call/Catch"],
+  ["ERROR", "S012", "/States/Call/Retry"]
+]}

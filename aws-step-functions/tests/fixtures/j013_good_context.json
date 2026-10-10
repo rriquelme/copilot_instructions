@@ -1,0 +1,20 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Output": {
+        "id": "{% $states.context.Execution.Id %}",
+        "in": "{% $states.context.Execution.Input.order.items[0].sku %}",
+        "ws": "{% $states . context . State . EnteredTime %}",
+        "sm": "{% $states.context.StateMachine.Name & ':' & $states.context.State.RetryCount %}",
+        "lit": "{% '$states.contxt is just text' & \"$states.context.Bogus\" %}",
+        "ctx": "{% $states.context %}",
+        "rd": "{% $states.context.Execution.RedriveCount + 0 %}",
+        "inp": "{% $states.input.whatever.deep %}"
+      },
+      "End": true
+    }
+  }
+}

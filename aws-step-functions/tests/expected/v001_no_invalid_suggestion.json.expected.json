@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "V001", "/States/B/Output/x"],
+  ["ERROR", "V007", "/States/A/Assign/a.b"]
+]}

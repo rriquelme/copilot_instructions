@@ -1,0 +1,67 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "LambdaSync",
+  "States": {
+    "LambdaSync": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.sync",
+      "Arguments": {
+        "FunctionName": "f"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "DdbWait"
+    },
+    "DdbWait": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem.waitForTaskToken",
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": {
+          "t": "{% $states.context.Task.Token %}"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "Next": "EcsSync2"
+    },
+    "EcsSync2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync:2",
+      "Next": "SdkSync"
+    },
+    "SdkSync": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startJobRun.sync",
+      "Next": "SnsSync"
+    },
+    "SnsSync": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish.sync",
+      "Next": "HttpWait"
+    },
+    "HttpWait": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::http:invoke.waitForTaskToken",
+      "End": true,
+      "Arguments": {
+        "QueueUrl": "q",
+        "MessageBody": {
+          "t": "{% $states.context.Task.Token %}"
+        }
+      },
+      "TimeoutSeconds": 60
+    }
+  }
+}

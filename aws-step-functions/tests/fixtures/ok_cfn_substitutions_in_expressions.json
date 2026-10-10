@@ -1,0 +1,5 @@
+{"QueryLanguage":"JSONata","StartAt":"Check","States":{
+ "Check":{"Type":"Choice","Choices":[{"Condition":"{% $states.input.amount > ${ApprovalThreshold} %}","Next":"Big"}],"Default":"Small"},
+ "Big":{"Type":"Map","Items":"{% $states.input.items %}","MaxConcurrency":"{% ${MaxConc} %}","ItemProcessor":{"ProcessorConfig":{"Mode":"INLINE"},"StartAt":"P","States":{"P":{"Type":"Pass","End":true}}},"Next":"Small"},
+ "Small":{"Type":"Wait","Seconds":"{% ${WaitSecs} %}","Next":"Done"},
+ "Done":{"Type":"Succeed"}}}

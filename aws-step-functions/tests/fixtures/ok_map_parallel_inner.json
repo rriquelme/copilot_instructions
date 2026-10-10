@@ -1,0 +1,6 @@
+{"QueryLanguage":"JSONata", "StartAt":"M","States":{
+ "M":{"Type":"Map","Items":"{% $states.input.items %}","ItemProcessor":{"StartAt":"W","States":{
+    "W":{"Type":"Wait","Seconds":1,"Next":"C"},
+    "C":{"Type":"Choice","Choices":[{"Condition":"{% $states.input.done %}","Next":"Fin"}],"Default":"W"},
+    "Fin":{"Type":"Succeed"}}},"Next":"P"},
+ "P":{"Type":"Parallel","Branches":[{"StartAt":"X","States":{"X":{"Type":"Pass","End":true}}}],"End":true}}}

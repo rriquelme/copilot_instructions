@@ -1,0 +1,4 @@
+{"StartAt":"A","States":{
+ "A":{"Type":"Pass","Assign":{"status.$":"$.status","unused.$":"$.other"},"Next":"B"},
+ "B":{"Type":"Choice","Choices":[{"Variable":"$status","StringEquals":"ok","Next":"C"}],"Default":"C"},
+ "C":{"Type":"Succeed"}}}

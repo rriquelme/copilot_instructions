@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "[2:/Resources/CleanupFlowA1B2C3D4/Properties/DefinitionString] /States/Wait/Next"],
+  ["INFO", "J000", "[1:/Resources/OrderFlow6C968CA5/Properties/DefinitionString] /QueryLanguage"],
+  ["INFO", "J000", "[2:/Resources/CleanupFlowA1B2C3D4/Properties/DefinitionString] /QueryLanguage"],
+  ["INFO", "S000", "[1:/Resources/OrderFlow6C968CA5/Properties/DefinitionString] /"],
+  ["INFO", "S000", "[2:/Resources/CleanupFlowA1B2C3D4/Properties/DefinitionString] /"]
+]}

@@ -1,0 +1,21 @@
+{
+  "StartAt": "Fan",
+  "States": {
+    "Fan": {
+      "Type": "Map",
+      "ItemsPath": "$.items",
+      "MaxConcurrency": 10,
+      "MaxConcurrencyPath": "$.maxConcurrency",
+      "ToleratedFailureCount": 5,
+      "ToleratedFailureCountPath": "$.failCount",
+      "ToleratedFailurePercentage": 10,
+      "ToleratedFailurePercentagePath": "$.failPct",
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "EXPRESS"},
+        "StartAt": "P",
+        "States": {"P": {"Type": "Pass", "End": true}}
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"StartAt": "A", "States": {"A": {"Type": "Pass", "Resource": "${x}" "End": true}}}

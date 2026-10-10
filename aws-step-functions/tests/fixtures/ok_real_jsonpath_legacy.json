@@ -1,0 +1,85 @@
+{
+  "Comment": "Legacy JSONPath machine: intrinsics, ResultSelector/ResultPath, Choice And/Or/Not, Map with ItemsPath, Wait TimestampPath",
+  "StartAt": "Prepare",
+  "TimeoutSeconds": 86400,
+  "States": {
+    "Prepare": {
+      "Type": "Pass",
+      "Parameters": {
+        "requestId.$": "States.UUID()",
+        "greeting.$": "States.Format('Hello {}, you have {} items', $.customer.name, States.ArrayLength($.items))",
+        "batches.$": "States.ArrayPartition($.items, 10)",
+        "startedAt.$": "$$.Execution.StartTime",
+        "items.$": "$.items",
+        "customer.$": "$.customer",
+        "notBefore.$": "$.notBefore"
+      },
+      "Next": "Lookup customer"
+    },
+    "Lookup customer": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "Parameters": {"TableName": "customers", "Key": {"id": {"S.$": "$.customer.id"}}},
+      "ResultSelector": {"tier.$": "$.Item.tier.S", "credit.$": "States.StringToJson($.Item.credit.S)"},
+      "ResultPath": "$.profile",
+      "Retry": [{"ErrorEquals": ["DynamoDB.ProvisionedThroughputExceededException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2.0}],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Lookup failed"}],
+      "Next": "Route"
+    },
+    "Route": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {"Variable": "$.profile.tier", "IsPresent": true},
+            {"Or": [
+              {"Variable": "$.profile.tier", "StringEquals": "GOLD"},
+              {"Variable": "$.profile.credit.limit", "NumericGreaterThanEquals": 5000}
+            ]},
+            {"Not": {"Variable": "$.customer.email", "StringMatches": "*@example.invalid"}}
+          ],
+          "Next": "Priority"
+        },
+        {"Variable": "$.notBefore", "TimestampGreaterThan": "2020-01-01T00:00:00Z", "Next": "Hold"}
+      ],
+      "Default": "Process items"
+    },
+    "Priority": {"Type": "Pass", "Result": "priority", "ResultPath": "$.lane", "Next": "Process items"},
+    "Hold": {"Type": "Wait", "TimestampPath": "$.notBefore", "Next": "Process items"},
+    "Process items": {
+      "Type": "Map",
+      "ItemsPath": "$.items",
+      "MaxConcurrency": 5,
+      "ItemSelector": {"item.$": "$$.Map.Item.Value", "index.$": "$$.Map.Item.Index", "requestId.$": "$.requestId"},
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "INLINE"},
+        "StartAt": "Price item",
+        "States": {
+          "Price item": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {"FunctionName": "price-item", "Payload.$": "$"},
+            "OutputPath": "$.Payload",
+            "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2}],
+            "End": true
+          }
+        }
+      },
+      "ResultSelector": {"count.$": "States.ArrayLength($)", "prices.$": "$[*].price"},
+      "ResultPath": "$.pricing",
+      "Next": "Summarise"
+    },
+    "Summarise": {
+      "Type": "Pass",
+      "Parameters": {
+        "requestId.$": "$.requestId",
+        "message.$": "$.greeting",
+        "total.$": "States.MathAdd($.pricing.count, 0)",
+        "digest.$": "States.Hash(States.JsonToString($.pricing), 'SHA-256')"
+      },
+      "OutputPath": "$",
+      "End": true
+    },
+    "Lookup failed": {"Type": "Fail", "ErrorPath": "$.error.Error", "CausePath": "$.error.Cause"}
+  }
+}

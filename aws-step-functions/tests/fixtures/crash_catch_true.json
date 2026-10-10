@@ -1,0 +1,4 @@
+{"QueryLanguage": "JSONata", "StartAt": "Call", "States": {
+  "Call": {"Type": "Task", "Resource": "arn:aws:states:::sqs:sendMessage", "Arguments": {"QueueUrl": "q", "MessageBody": "m"},
+           "Catch": true, "Retry": null, "Next": "Done"},
+  "Done": {"Type": "Succeed"}}}

@@ -1,0 +1,13 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Init",
+  "States": {
+    "Init": {"Type": "Pass", "Output": {"i": 0, "pages": "{% $states.input.pages %}"}, "Next": "Render"},
+    "Render": {"Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {"FunctionName": "render", "Payload": "{% $states.input %}"},
+      "Retry": [{"ErrorEquals": ["Lambda.ServiceException"], "MaxAttempts": 3}],
+      "Output": {"i": "{% $states.input.i + 1 %}", "pages": "{% $states.input.pages %}"}, "Next": "More"},
+    "More": {"Type": "Choice", "Choices": [{"Condition": "{% $states.input.i < $count($states.input.pages) %}", "Next": "Render"}], "Default": "Done"},
+    "Done": {"Type": "Succeed"}
+  }
+}

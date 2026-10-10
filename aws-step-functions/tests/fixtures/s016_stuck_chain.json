@@ -1,0 +1,5 @@
+{"QueryLanguage":"JSONata", "StartAt":"Start","States":{
+ "Start":{"Type":"Choice","Choices":[{"Condition":"{% $states.input.ok %}","Next":"Done"}],"Default":"Into"},
+ "Done":{"Type":"Succeed"},
+ "Into":{"Type":"Pass","Next":"Spin"},
+ "Spin":{"Type":"Wait","Seconds":5,"Next":"Spin"}}}

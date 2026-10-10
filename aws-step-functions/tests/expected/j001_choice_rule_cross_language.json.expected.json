@@ -1,0 +1,11 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J001", "/States/AtaChoice/Choices/0/StringEquals"],
+  ["ERROR", "J001", "/States/AtaChoice/Choices/0/Variable"],
+  ["ERROR", "J001", "/States/AtaChoice/Choices/1/And"],
+  ["ERROR", "J001", "/States/AtaChoice/Choices/2/Not"],
+  ["ERROR", "J001", "/States/PathChoice/Choices/0/Output"],
+  ["ERROR", "J001", "/States/PathChoice/Choices/1/Condition"],
+  ["ERROR", "J001", "/States/PathChoice/Choices/1/Condition"],
+  ["ERROR", "S006", "/States/PathChoice/Choices/1"],
+  ["ERROR", "V002", "/States/AtaChoice/Choices/0/Condition"]
+]}

@@ -1,0 +1,5 @@
+{"QueryLanguage":"JSONata", "StartAt":"Call","States":{
+ "Call":{"Type":"Task","Resource":"arn:aws:states:::lambda:invoke","Arguments":{"FunctionName":"f","Payload":"{% $states.input %}"},
+   "Retry":[{"ErrorEquals":["States.TaskFailed"],"MaxAttempts":3}],
+   "Catch":[{"ErrorEquals":["States.ALL"],"Next":"Pause"}],"End":true},
+ "Pause":{"Type":"Wait","Seconds":30,"Next":"Call"}}}

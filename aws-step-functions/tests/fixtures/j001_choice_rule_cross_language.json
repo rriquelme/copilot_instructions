@@ -1,0 +1,24 @@
+{
+  "StartAt": "PathChoice",
+  "States": {
+    "PathChoice": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.status", "StringEquals": "DONE", "Output": {"x": 1}, "Assign": {"seen": true}, "Next": "AtaChoice"},
+        {"Condition": "{% $states.input.status = 'FAILED' %}", "Next": "AtaChoice"}
+      ],
+      "Default": "AtaChoice"
+    },
+    "AtaChoice": {
+      "Type": "Choice",
+      "QueryLanguage": "JSONata",
+      "Choices": [
+        {"Condition": "{% $seen %}", "Variable": "$.status", "StringEquals": "DONE", "Next": "Done"},
+        {"Condition": "{% true %}", "And": [{"Variable": "$.a", "IsPresent": true}], "Next": "Done"},
+        {"Condition": "{% true %}", "Not": {"Variable": "$.a", "IsPresent": true}, "Assign": {"seen": false}, "Output": {"ok": true}, "Next": "Done"}
+      ],
+      "Default": "Done"
+    },
+    "Done": {"Type": "Succeed"}
+  }
+}

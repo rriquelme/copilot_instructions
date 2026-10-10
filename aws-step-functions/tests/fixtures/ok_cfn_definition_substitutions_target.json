@@ -1,0 +1,3 @@
+{"Resources":{"SM":{"Type":"AWS::StepFunctions::StateMachine","Properties":{
+"DefinitionSubstitutions":{"Target":"Ship"},
+"Definition":{"StartAt":"Choose","States":{"Choose":{"Type":"Choice","Choices":[{"Variable":"$.x","BooleanEquals":true,"Next":"${Target}"}],"Default":"Fallback"},"Ship":{"Type":"Succeed"},"Fallback":{"Type":"Succeed"}}}}}}}

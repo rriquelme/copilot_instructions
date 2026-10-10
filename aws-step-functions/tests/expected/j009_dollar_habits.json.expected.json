@@ -1,0 +1,13 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J009", "/States/P/Output/errExecution"],
+  ["ERROR", "J009", "/States/P/Output/errMapItem"],
+  ["ERROR", "J009", "/States/P/Output/errState"],
+  ["WARNING", "J009", "/States/P/Output/warnAfterPredicate"],
+  ["WARNING", "J009", "/States/P/Output/warnAfterTransform"],
+  ["WARNING", "J009", "/States/P/Output/warnArrayCtor"],
+  ["WARNING", "J009", "/States/P/Output/warnConcat"],
+  ["WARNING", "J009", "/States/P/Output/warnFunctionArg"],
+  ["WARNING", "J009", "/States/P/Output/warnGrouping"],
+  ["WARNING", "J009", "/States/P/Output/warnObjectCtor"],
+  ["WARNING", "J009", "/States/P/Output/warnTopLevel"]
+]}

@@ -1,0 +1,26 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+%{~ if a ~}
+%{ if b }
+      "Comment": "a and b",
+%{ else }
+      "Comment": "a only",
+%{ endif }
+      "Next": "B"
+    },
+    "B": {"Type": "Pass", "Comment": "%{ if x }yes%{ else }no%{ endif }", "Next": "Fan"},
+%{~ else ~}
+      "End": true
+    },
+%{~ endif ~}
+    "Fan": {"Type": "Parallel", "Branches": [
+%{ for b in branches ~}
+      {"StartAt": "${b}", "States": {"${b}": {"Type": "Pass", "End": true}}},
+%{ endfor ~}
+    ], "Next": "Missing"}
+  }
+}

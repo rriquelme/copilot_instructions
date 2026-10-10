@@ -1,0 +1,10 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J005", "/States/P/Output/errCoalesceFn"],
+  ["WARNING", "J007", "/States/P/Output/warnBothInCall"],
+  ["WARNING", "J007", "/States/P/Output/warnBothInCall"],
+  ["WARNING", "J007", "/States/P/Output/warnCoalesce"],
+  ["WARNING", "J007", "/States/P/Output/warnCoalesceNoSpace"],
+  ["WARNING", "J007", "/States/P/Output/warnElvis"],
+  ["WARNING", "J007", "/States/P/Output/warnElvisNoSpace"],
+  ["WARNING", "J007", "/States/P/Output/warnInLambda"]
+]}

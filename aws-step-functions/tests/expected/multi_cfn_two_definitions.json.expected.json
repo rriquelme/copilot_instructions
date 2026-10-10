@@ -1,0 +1,6 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "[2:/Resources/SM2/Properties/DefinitionString] /States/A/Next"],
+  ["INFO", "J000", "[2:/Resources/SM2/Properties/DefinitionString] /QueryLanguage"],
+  ["INFO", "S000", "[1:/Resources/SM/Properties/Definition] /"],
+  ["INFO", "S000", "[2:/Resources/SM2/Properties/DefinitionString] /"]
+]}

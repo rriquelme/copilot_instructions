@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["WARNING", "J013", "/States/M/ItemSelector/i"],
+  ["WARNING", "J013", "/States/M/ItemSelector/v"]
+]}

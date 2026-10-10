@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "V007", "/States/A/Assign/$states"],
+  ["ERROR", "V007", "/States/A/Assign/$total.$"],
+  ["INFO", "J000", "/QueryLanguage"],
+  ["WARNING", "V006", "/States/A/Assign/count"],
+  ["WARNING", "V006", "/States/A/Assign/orderId.$"]
+]}

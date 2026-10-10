@@ -1,0 +1,14 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "P",
+  "States": {
+    "P": {
+      "Type": "Pass",
+      "Output": {
+        "k0": "{% $join(['a,b', 'c,d'], ', ') %}",
+        "k1": "{% $split($states.input.s, ',') %}"
+      },
+      "End": true
+    }
+  }
+}

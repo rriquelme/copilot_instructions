@@ -1,0 +1,4 @@
+{"StartAt":"A","States":{
+ "A":{"Type":"Pass","Assign":{"status.$":"$.status","price.$":"$.price","fmt":"x"},"Next":"B"},
+ "B":{"Type":"Choice","Choices":[{"Variable":"$status","StringEquals":"ok","Next":"C"}],"Default":"C"},
+ "C":{"Type":"Pass","Parameters":{"p.$":"$price.amount","m.$":"States.Format('{}', $fmt)"},"End":true}}}

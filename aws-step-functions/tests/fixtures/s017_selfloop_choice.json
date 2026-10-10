@@ -1,0 +1,3 @@
+{"QueryLanguage":"JSONata", "StartAt":"Check","States":{
+ "Check":{"Type":"Choice","Choices":[{"Condition":"{% $states.input.s = 'DONE' %}","Next":"Done"}],"Default":"Check"},
+ "Done":{"Type":"Succeed"}}}

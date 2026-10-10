@@ -1,0 +1,31 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "MissingColons",
+  "States": {
+    "MissingColons": {
+      "Type": "Task",
+      "Resource": "arn:aws:states::lambda:invoke",
+      "Next": "BadPartition"
+    },
+    "BadPartition": {
+      "Type": "Task",
+      "Resource": "arn:aws-foo:states:::sqs:sendMessage",
+      "Next": "NotArn"
+    },
+    "NotArn": {
+      "Type": "Task",
+      "Resource": "my-function",
+      "Next": "StateMachineArn"
+    },
+    "StateMachineArn": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:us-east-1:123456789012:stateMachine:child",
+      "Next": "SdkNoAction"
+    },
+    "SdkNoAction": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3",
+      "End": true
+    }
+  }
+}

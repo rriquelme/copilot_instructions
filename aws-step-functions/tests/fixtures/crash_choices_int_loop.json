@@ -1,0 +1,1 @@
+{"StartAt": "A", "States": {"A": {"Type": "Pass", "Choices": 1, "Next": "B"}, "B": {"Type": "Choice", "Choices": [{"Variable": "$.x", "IsNull": true, "Next": "A"}], "Default": "C"}, "C": {"Type": "Succeed"}}}

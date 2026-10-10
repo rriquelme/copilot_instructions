@@ -1,0 +1,11 @@
+{
+  "StartAt": "Get",
+  "States": {
+    "Get": {"Type": "Task", "Resource": "arn:aws:states:::dynamodb:getItem",
+            "Parameters": {"TableName": "t", "Key": {"pk": {"S": "a"}}}, "Next": "Shape"},
+    "Shape": {"Type": "Pass", "Parameters": {"id.$": "$.Item.id.S"}, "Assign": {"n.$": "$.Item.n.N"}, "Next": "FromInput"},
+    "FromInput": {"Type": "Pass", "Assign": {"id.$": "$.id"}, "Next": "FromVar"},
+    "FromVar": {"Type": "Pass", "Assign": {"again.$": "$id"}, "Next": "Done"},
+    "Done": {"Type": "Pass", "Parameters": {"n.$": "$n", "id.$": "$id", "again.$": "$again"}, "End": true}
+  }
+}

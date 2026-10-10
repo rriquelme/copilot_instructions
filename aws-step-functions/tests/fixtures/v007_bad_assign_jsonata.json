@@ -1,0 +1,50 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "f"
+      },
+      "Output": "{% $states.result.Payload %}",
+      "Assign": {
+        "$orderId": "{% $states.input.id %}",
+        "order.total": 1,
+        "my var": 2,
+        "1st": 3,
+        "states": 4,
+        "ok_name": 5
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Assign": {
+            "$err": "{% $states.errorOutput %}"
+          },
+          "Next": "C"
+        }
+      ],
+      "Next": "C"
+    },
+    "C": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% true %}",
+          "Assign": {
+            "route-name": "x"
+          },
+          "Next": "D"
+        }
+      ],
+      "Default": "D"
+    },
+    "D": {
+      "Type": "Succeed"
+    }
+  }
+}

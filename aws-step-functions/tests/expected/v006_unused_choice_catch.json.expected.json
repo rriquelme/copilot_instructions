@@ -1,0 +1,5 @@
+{"type": "STANDARD", "diagnostics": [
+  ["INFO", "P005", "/States/Work"],
+  ["WARNING", "V006", "/States/Route/Choices/0/Assign/route"],
+  ["WARNING", "V006", "/States/Work/Catch/0/Assign/errInfo"]
+]}

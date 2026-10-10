@@ -1,0 +1,30 @@
+{
+  "Comment": "JSONPath variable reads: typos are V001, reads before assignment V002; $, $.x, $$.x, $[0] and quoted text are not variables",
+  "StartAt": "Load",
+  "States": {
+    "Load": {"Type": "Pass", "Assign": {"orderId.$": "$.id", "items.$": "$.items"}, "Next": "Use"},
+    "Use": {
+      "Type": "Pass",
+      "InputPath": "$itemz",
+      "Parameters": {
+        "id.$": "$orderID",
+        "msg.$": "States.Format('order {} costs $notAVar', $neverSet)",
+        "whole.$": "$",
+        "ctx.$": "$$.Execution.Id",
+        "first.$": "$[0]",
+        "ok.$": "$orderId"
+      },
+      "ResultPath": "$.out",
+      "Next": "Route"
+    },
+    "Route": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$statuz", "StringEquals": "DONE", "Next": "Late"},
+        {"And": [{"Variable": "$.a", "StringEqualsPath": "$expected"}, {"Not": {"Variable": "$later", "IsPresent": true}}], "Next": "Late"}
+      ],
+      "Default": "Late"
+    },
+    "Late": {"Type": "Pass", "Assign": {"later": 1, "expected": "x"}, "OutputPath": "$later", "End": true}
+  }
+}

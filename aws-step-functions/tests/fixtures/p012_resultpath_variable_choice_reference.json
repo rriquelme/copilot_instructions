@@ -1,0 +1,24 @@
+{
+  "StartAt": "Call",
+  "States": {
+    "Call": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:listObjectsV2",
+      "Parameters": {"Bucket": "b"},
+      "ResultPath": "$myVar",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$err.detail", "Next": "Check"}],
+      "Next": "Check"
+    },
+    "Check": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.items[*].x", "StringEquals": "a", "Next": "Done"},
+        {"Variable": "$..x", "IsPresent": true, "Next": "Done"},
+        {"Variable": "$.a", "StringEqualsPath": "$.list[0:2]", "Next": "Done"},
+        {"And": [{"Variable": "$.items[?(@.x == 1)]", "IsPresent": true}], "Next": "Done"}
+      ],
+      "Default": "Done"
+    },
+    "Done": {"Type": "Succeed"}
+  }
+}

@@ -1,0 +1,7 @@
+{"StartAt": "Map", "States": {
+  "Map": {"Type": "Map", "ItemProcessor": {"ProcessorConfig": "x", "StartAt": ["Inner"], "States": {"Inner": {"Type": "Pass", "End": true}}},
+          "Parameters": "$.items", "Assign": [1], "Next": "Wait"},
+  "Wait": {"Type": "Task", "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+           "Parameters": {"QueueUrl": "q", "MessageBody": {"token.$": "$$.Task.Token", "n.$": 5}},
+           "HeartbeatSeconds": "60", "TimeoutSeconds": null, "Next": "Bad"},
+  "Bad": {"Type": "Fail", "Error": 42, "Cause": {"text": "x"}}}}

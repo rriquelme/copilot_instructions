@@ -1,0 +1,30 @@
+{
+  "Comment": "?? and ?: are JSONata 2.1+ (Step Functions implements 2.0.6): warn* keys get WARNING J007, ok* keys must stay clean.",
+  "QueryLanguage": "JSONata",
+  "StartAt": "P",
+  "States": {
+    "P": {
+      "Type": "Pass",
+      "Output": {
+        "warnCoalesce": "{% $states.input.items ?? [] %}",
+        "warnCoalesceNoSpace": "{% $states.input.note??null %}",
+        "warnElvis": "{% $states.input.name ?: 'unknown' %}",
+        "warnElvisNoSpace": "{% $states.input.count?:0 %}",
+        "warnBothInCall": "{% $lowercase($trim($states.input.email ?? '')) & ($states.input.tag ?: '-') %}",
+        "warnInLambda": "{% $map($states.input.items, function($v) { $v.price ?? 0 }) %}",
+        "errCoalesceFn": "{% $coalesce($states.input.note, '') %}",
+        "okExistsGuard": "{% $exists($states.input.items) ? $states.input.items : [] %}",
+        "okTruthyGuard": "{% $states.input.name ? $states.input.name : 'unknown' %}",
+        "okConditional": "{% $states.input.a ? $states.input.b : $states.input.c %}",
+        "okConditionalNoSpace": "{% $states.input.a?1:2 %}",
+        "okVarConditional": "{% ($x := $states.input.n; $x ? $x : 0) %}",
+        "okNestedConditional": "{% $states.input.a ? ($states.input.b ? 1 : 2) : 3 %}",
+        "okStringLiterals": "{% 'a ?? b' & \"c ?: d\" %}",
+        "okRegex": "{% $contains($states.input.s, /x??y/) and $contains($states.input.s, /a(?:b)/) %}",
+        "okComment": "{% /* x ?? y, x ?: y */ $states.input.a %}",
+        "okBacktickName": "{% $states.input.`odd??name` %}"
+      },
+      "End": true
+    }
+  }
+}

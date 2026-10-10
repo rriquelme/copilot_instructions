@@ -1,0 +1,17 @@
+{"StartAt":"C","States":{
+ "C":{"Type":"Choice","Choices":[
+   {"Variable":"$.n","NumericEquals":"10","Next":"D"},
+   {"Variable":"$.s","StringEquals":"a","StringMatches":"b*","Next":"D"},
+   {"Variable":"$.b","BooleanEquals":"true","Next":"D"},
+   {"Variable":"$.t","TimestampGreaterThan":"2025-01-31 10:00","Next":"D"},
+   {"Variable":"$.p","IsPresent":"yes","Next":"D"},
+   {"Variable":"$.x","StringEqualsPath":"other","Next":"D"},
+   {"Variable":"$.n","NumericEquals":true,"Next":"D"},
+   {"Variable":"$.s","StringEquals":5,"Next":"D"},
+   {"Variable":"$.v","Next":"D"},
+   {"And":[],"Next":"D"},
+   {"Not":[{"Variable":"$.a","IsNull":true}],"Next":"D"},
+   {"Or":[{"Variable":"$.a","NumericLessThan":"3"},{"StringEquals":"x"},{"Comment":"empty"}],"Next":"D"},
+   {"Variable":"$.a","IsNull":true,"And":[{"Variable":"$.b","IsNull":true}],"Next":"D"}
+ ],"Default":"D"},
+ "D":{"Type":"Succeed"}}}

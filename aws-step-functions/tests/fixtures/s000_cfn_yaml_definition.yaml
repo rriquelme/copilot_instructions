@@ -1,0 +1,11 @@
+Resources:
+  SM:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      Definition:
+        QueryLanguage: JSONata
+        StartAt: A
+        States:
+          A:
+            Type: Pass
+            Next: B

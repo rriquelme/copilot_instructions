@@ -1,0 +1,4 @@
+{"StartAt":"A","States":{
+ "A":{"Type":"Task","Resource":"arn:aws:states:::glue:startJobRun.waitForTaskToken","Parameters":{"JobName":"j","Arguments":{"--t.$":"$$.Task.Token"}},"HeartbeatSeconds":60,"Next":"B"},
+ "B":{"Type":"Task","Resource":"arn:aws:states:::sagemaker:createTrainingJob.sync","Next":"C"},
+ "C":{"Type":"Task","Resource":"arn:aws:states:::aws-sdk:sqs:sendMessage.waitForTaskToken","Parameters":{"QueueUrl":"q","MessageBody.$":"$$.Task.Token"},"TimeoutSeconds":60,"Retry":[{"ErrorEquals":["States.Runtime"],"MaxAttempts":2}],"End":true}}}

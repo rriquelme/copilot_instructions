@@ -1,0 +1,9 @@
+{"QueryLanguage":"JSONata", "StartAt":"Init poll","States":{
+"Init poll": { "Type": "Pass", "Assign": { "attempt": 0, "maxAttempts": 20 }, "Next": "Get status" },
+"Get status": {"Type": "Task","Resource": "arn:aws:states:::aws-sdk:glue:getJobRun","Arguments": { "JobName": "nightly", "RunId": "x" },
+  "Assign": { "status": "{% $states.result.JobRun.JobRunState %}", "attempt": "{% $attempt + 1 %}" },"Output": "{% $states.input %}","Next": "Finished?"},
+"Finished?": {"Type": "Choice","Choices": [
+    { "Condition": "{% $status = 'SUCCEEDED' %}", "Next": "Done" },
+    { "Condition": "{% $attempt >= $maxAttempts %}", "Next": "Gave up" }],"Default": "Backoff"},
+"Backoff": { "Type": "Wait", "Seconds": "{% $min([300, 10 * $power(2, $attempt)]) %}", "Next": "Get status" },
+"Done":{"Type":"Succeed"},"Gave up":{"Type":"Fail","Error":"Timeout"}}}

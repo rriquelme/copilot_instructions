@@ -1,0 +1,23 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Assign": {
+        "orderId": "{% $states.input.id %}",
+        "_tmp": 1,
+        "café": 2,
+        "x1": 3
+      },
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Pass",
+      "Output": {
+        "o": "{% $orderId & $string($x1) & $café & $string($_tmp) %}"
+      },
+      "End": true
+    }
+  }
+}

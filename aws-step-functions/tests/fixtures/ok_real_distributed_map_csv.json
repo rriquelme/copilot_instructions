@@ -1,0 +1,45 @@
+{
+  "Comment": "Distributed Map over an S3 CSV file with batching and results written back to S3",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Process rows",
+  "States": {
+    "Process rows": {
+      "Type": "Map",
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "CSV", "CSVHeaderLocation": "FIRST_ROW", "MaxItems": 100000},
+        "Arguments": {"Bucket": "{% $states.input.bucket %}", "Key": "{% $states.input.key %}"}
+      },
+      "ItemBatcher": {"MaxItemsPerBatch": 100, "BatchInput": {"jobId": "{% $states.input.jobId %}"}},
+      "MaxConcurrency": 200,
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "EXPRESS"},
+        "StartAt": "Transform batch",
+        "States": {
+          "Transform batch": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Arguments": {"FunctionName": "transform-rows", "Payload": {"jobId": "{% $states.input.BatchInput.jobId %}", "rows": "{% $states.input.Items %}"}},
+            "Retry": [
+              {"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+               "IntervalSeconds": 2, "MaxAttempts": 6, "BackoffRate": 2, "JitterStrategy": "FULL"}
+            ],
+            "Output": "{% $states.result.Payload %}",
+            "End": true
+          }
+        }
+      },
+      "ResultWriter": {
+        "Resource": "arn:aws:states:::s3:putObject",
+        "Arguments": {"Bucket": "{% $states.input.bucket %}", "Prefix": "{% 'results/' & $states.input.jobId %}"}
+      },
+      "ToleratedFailurePercentage": 5,
+      "Label": "CsvRows",
+      "Catch": [{"ErrorEquals": ["States.ExceedToleratedFailureThreshold", "States.ItemReaderFailed", "States.ResultWriterFailed"], "Next": "Job failed"}],
+      "Output": "{% $states.result.ResultWriterDetails %}",
+      "Next": "Job done"
+    },
+    "Job done": {"Type": "Succeed"},
+    "Job failed": {"Type": "Fail", "Error": "CsvJobFailed", "Cause": "{% $states.input.Cause %}"}
+  }
+}

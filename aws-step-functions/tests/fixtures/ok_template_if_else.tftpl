@@ -1,0 +1,31 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Fetch",
+  "States": {
+    "Fetch": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {"FunctionName": "${fetch_fn_arn}", "Payload": {"env": "${env}", "id": "{% $states.input.id %}"}},
+      "Output": "{% $states.result.Payload %}",
+      "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"], "MaxAttempts": ${max_attempts}, "IntervalSeconds": 2}],
+      "TimeoutSeconds": ${timeout},
+      "Next": "Pause"
+    },
+    "Pause": {"Type": "Wait", "Seconds": ${wait_seconds}, "Next": "Each"},
+    "Each": {
+      "Type": "Map",
+      "Items": "{% $states.input.rows %}",
+      "MaxConcurrency": ${concurrency},
+      "ItemProcessor": {"StartAt": "Put", "States": {
+        "Put": {"Type": "Task", "Resource": "arn:aws:states:::dynamodb:putItem", "Arguments": {"TableName": "${table}", "Item": {"pk": {"S": "{% $states.input.id & '#${env}' %}"}}}, "End": true}
+      }},
+%{ if enable_notify ~}
+      "Next": "Notify"
+    },
+    "Notify": {"Type": "Task", "Resource": "arn:aws:states:::sns:publish", "Arguments": {"TopicArn": "${topic}", "Message": "done"}, "End": true}
+%{ else ~}
+      "End": true
+    }
+%{ endif ~}
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "Comment": "AWS variable names: Unicode ID_Start then ID_Continue (no leading _), at most 80 characters",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Assign": {
+        "_tmp": 1,
+        "1st": 2,
+        "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv": 3,
+        "__": 4,
+        "Größe": 5
+      },
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Pass",
+      "Output": {
+        "o": "{% [$tmp, $v1st, $Größe] %}"
+      },
+      "End": true
+    }
+  }
+}

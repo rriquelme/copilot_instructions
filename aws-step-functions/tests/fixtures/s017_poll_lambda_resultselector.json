@@ -1,0 +1,4 @@
+{"StartAt":"Get","States":{
+"Get":{"Type":"Task","Resource":"arn:aws:states:::lambda:invoke","Parameters":{"FunctionName":"checkJob","Payload.$":"$"},"Retry":[{"ErrorEquals":["Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException","Lambda.TooManyRequestsException"],"IntervalSeconds":1,"MaxAttempts":3,"BackoffRate":2}],"ResultSelector":{"done.$":"$.Payload.done"},"ResultPath":"$.status","Next":"Check"},
+"Check":{"Type":"Choice","Choices":[{"Variable":"$.status.done","BooleanEquals":false,"Next":"Get"}],"Default":"Done"},
+"Done":{"Type":"Succeed"}}}

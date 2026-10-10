@@ -1,0 +1,9 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J003", "/States/T/Arguments/Tags/0/Value"],
+  ["ERROR", "J003", "/States/T/Arguments/Tags/1/Value"],
+  ["ERROR", "J003", "/States/T/Arguments/Tags/2/Value"],
+  ["ERROR", "V001", "/States/T/Arguments/Payload/Comment"],
+  ["WARNING", "J003", "/States/T/Arguments/Template/HtmlPart"],
+  ["WARNING", "J003", "/States/T/Arguments/Template/SubjectPart"],
+  ["WARNING", "J003", "/States/T/Arguments/Template/TextPart"]
+]}

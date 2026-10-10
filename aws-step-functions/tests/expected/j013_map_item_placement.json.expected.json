@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["WARNING", "J013", "/States/M/ItemProcessor/States/P/Output/bad"],
+  ["WARNING", "J013", "/States/M/Output/x"]
+]}

@@ -1,0 +1,9 @@
+{
+  "Comment": "A malformed Assign key (V007) must not be offered as a V001 did-you-mean",
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {"Type": "Pass", "Assign": {"a.b": 1}, "Next": "B"},
+    "B": {"Type": "Pass", "Output": {"x": "{% $ab %}"}, "End": true}
+  }
+}

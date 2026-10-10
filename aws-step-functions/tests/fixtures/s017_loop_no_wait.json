@@ -1,0 +1,4 @@
+{"QueryLanguage":"JSONata", "StartAt":"Get","States":{
+ "Get":{"Type":"Task","Resource":"arn:aws:states:::aws-sdk:glue:getJobRun","Arguments":{"JobName":"j","RunId":"r"},"Next":"Check"},
+ "Check":{"Type":"Choice","Choices":[{"Condition":"{% $states.input.s = 'DONE' %}","Next":"Done"}],"Default":"Get"},
+ "Done":{"Type":"Succeed"}}}

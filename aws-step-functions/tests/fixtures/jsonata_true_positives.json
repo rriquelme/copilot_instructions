@@ -1,0 +1,23 @@
+{
+  "Comment": "True positives that must still fire after the false-positive fixes (J005, J007, J014, V001, V002).",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Init",
+  "States": {
+    "Init": {"Type": "Pass", "Assign": {"count": 1}, "Next": "P"},
+    "P": {
+      "Type": "Pass",
+      "Assign": {"later": "{% $sum + $count %}"},
+      "Output": {
+        "unknownFn": "{% $foo($states.input.a) %}",
+        "doubleEquals": "{% $states.input.a == 1 %}",
+        "andAnd": "{% $states.input.a && $states.input.b %}",
+        "arityRegexClass": "{% $replace($states.input.key, /[^/]+$/) %}",
+        "arityDivision": "{% $substring($states.input.n / 2) %}",
+        "unboundVar": "{% $states.input.items.$it %}",
+        "builtinNameAsVar": "{% $count + 1 %}"
+      },
+      "Next": "Q"
+    },
+    "Q": {"Type": "Pass", "Assign": {"sum": "{% $later %}"}, "Output": {}, "End": true}
+  }
+}

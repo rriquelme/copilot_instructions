@@ -1,0 +1,5 @@
+{"QueryLanguage":"JSONata","StartAt":"Work","States":{
+ "Work":{"Type":"Task","Resource":"arn:aws:states:::lambda:invoke","Arguments":{"FunctionName":"f","Payload":"{% $states.input %}"},"Output":"{% $states.result.Payload %}",
+   "Catch":[{"ErrorEquals":["States.ALL"],"Assign":{"errInfo":"{% $states.errorOutput %}"},"Next":"Route"}],"Next":"Route"},
+ "Route":{"Type":"Choice","Choices":[{"Condition":"{% $states.input.ok %}","Assign":{"route":"ok"},"Next":"Done"}],"Default":"Done"},
+ "Done":{"Type":"Succeed"}}}

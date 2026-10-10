@@ -1,0 +1,24 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "T",
+  "States": {
+    "T": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "End": true,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.Runtime",
+            "States.DataLimitExceeded"
+          ]
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ]
+        }
+      ]
+    }
+  }
+}

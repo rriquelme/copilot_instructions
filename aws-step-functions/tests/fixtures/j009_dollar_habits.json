@@ -1,0 +1,29 @@
+{
+  "Comment": "True positives that must still fire: $.field at root context (warning) and $$.<context object> (error). Each key notes the expectation.",
+  "QueryLanguage": "JSONata",
+  "StartAt": "P",
+  "States": {
+    "P": {
+      "Type": "Pass",
+      "Output": {
+        "warnTopLevel": "{% $.orderId %}",
+        "warnConcat": "{% $.a & '-' & $.b %}",
+        "warnFunctionArg": "{% $count($.items) %}",
+        "warnObjectCtor": "{% { \"id\": $.id } %}",
+        "warnArrayCtor": "{% [$.a, $.b] %}",
+        "warnGrouping": "{% ($.total * 2) %}",
+        "warnAfterTransform": "{% $merge([$states.input ~> |items|{\"x\": 1}|, $.extra]) %}",
+        "warnAfterPredicate": "{% $states.input.items[price > 1] & $.name %}",
+        "errExecution": "{% $$.Execution.Id %}",
+        "errMapItem": "{% $states.input.items[$$.Map.Item.Index] %}",
+        "errState": "{% $$ . State.Name %}",
+        "okPredicate": "{% $states.input.items[$.price > 10] %}",
+        "okStepCall": "{% $states.input.items.$string($.id) %}",
+        "okRootContext": "{% $states.input.items[price > $$.min] %}",
+        "okLambdaSignature": "{% $map($states.input.items, function($v)<o:x>{ $.id }) %}",
+        "okTransform": "{% $states.input ~> |$.items|{\"done\": true}| %}"
+      },
+      "End": true
+    }
+  }
+}

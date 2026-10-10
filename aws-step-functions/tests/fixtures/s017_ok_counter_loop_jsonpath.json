@@ -1,0 +1,20 @@
+{
+  "StartAt": "Init",
+  "States": {
+    "Init": {"Type": "Pass", "Assign": {"i": 0, "n.$": "States.ArrayLength($.batches)"}, "Next": "HasMore"},
+    "HasMore": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$i", "NumericLessThanPath": "$n", "Next": "Send"}],
+      "Default": "Done"
+    },
+    "Send": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:sqs:sendMessageBatch",
+      "Parameters": {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q", "Entries.$": "States.ArrayGetItem($.batches, $i)"},
+      "ResultPath": null,
+      "Assign": {"i.$": "States.MathAdd($i, 1)"},
+      "Next": "HasMore"
+    },
+    "Done": {"Type": "Succeed"}
+  }
+}

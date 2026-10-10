@@ -1,0 +1,18 @@
+{
+  "StartAt": "Init",
+  "States": {
+    "Init": {"Type": "Pass", "Assign": {"limit.$": "$.limit"}, "Next": "Each"},
+    "Each": {
+      "Type": "Map",
+      "ItemsPath": "$.items",
+      "ItemProcessor": {
+        "StartAt": "Work",
+        "States": {
+          "Work": {"Type": "Pass", "Assign": {"limit": 5}, "Next": "Use"},
+          "Use": {"Type": "Pass", "Parameters": {"l.$": "$limit"}, "End": true}
+        }
+      },
+      "End": true
+    }
+  }
+}

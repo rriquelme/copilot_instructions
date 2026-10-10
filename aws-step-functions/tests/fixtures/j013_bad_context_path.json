@@ -1,0 +1,16 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Output": {
+        "a": "{% $states.context.Execution.ID %}",
+        "b": "{% $states.context.execution.Name %}",
+        "c": "{% $states.context.State.Name.first %}",
+        "d": "{% $states.context.StateMachine.Arn %}"
+      },
+      "End": true
+    }
+  }
+}

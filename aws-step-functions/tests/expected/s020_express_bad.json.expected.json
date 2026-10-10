@@ -1,0 +1,8 @@
+{"type": "EXPRESS", "diagnostics": [
+  ["ERROR", "S020", "/States/Act/Resource"],
+  ["ERROR", "S020", "/States/Dist/ItemProcessor/ProcessorConfig/Mode"],
+  ["ERROR", "S020", "/States/Par/Branches/0/States/Child/Resource"],
+  ["ERROR", "S020", "/States/Sync/Resource"],
+  ["ERROR", "S020", "/States/Wait/Resource"],
+  ["WARNING", "S020", "/TimeoutSeconds"]
+]}

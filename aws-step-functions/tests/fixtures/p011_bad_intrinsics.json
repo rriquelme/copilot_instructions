@@ -1,0 +1,12 @@
+{"StartAt":"P","States":{
+ "P":{"Type":"Pass","Parameters":{
+   "a.$":"States.Fromat('x {}', $.a)",
+   "b.$":"States.Format('x {} {}', $.a)",
+   "c.$":"States.ArrayRange(1, 9)",
+   "d.$":"States.UUID(1)",
+   "e.$":"States.Format('it\\'s {}', States.ArrayLength($.a, $.b))",
+   "f.$":"States.Hash($.a, 'SHA-256'",
+   "g.$":"States.MathAdd($.a,, 1)",
+   "h.$":"States.ArrayGetItem($.a, 0) + 1",
+   "i.$":"States.Format"
+ },"End":true}}}

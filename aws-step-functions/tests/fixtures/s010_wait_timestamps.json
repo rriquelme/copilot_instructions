@@ -1,0 +1,11 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Offset",
+  "States": {
+    "Offset": {"Type": "Wait", "Timestamp": "2026-01-31T10:00:00+05:30", "Next": "Zulu"},
+    "Zulu": {"Type": "Wait", "Timestamp": "2026-01-31T10:00:00.250Z", "Next": "Lower"},
+    "Lower": {"Type": "Wait", "Timestamp": "2026-01-31t10:00:00z", "Next": "NoZone"},
+    "NoZone": {"Type": "Wait", "Timestamp": "2026-01-31T10:00:00", "Next": "Expr"},
+    "Expr": {"Type": "Wait", "Timestamp": "{% $states.input.at %}", "End": true}
+  }
+}

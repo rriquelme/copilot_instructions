@@ -1,0 +1,13 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "P010", "/States/Wait/Parameters/MessageBody/n.$"],
+  ["ERROR", "S001", "/States/Map/ItemProcessor/StartAt"],
+  ["ERROR", "S003", "/States/Map/ItemProcessor/States/Inner"],
+  ["ERROR", "S009", "/States/Map/Assign"],
+  ["ERROR", "S009", "/States/Map/Parameters"],
+  ["ERROR", "S011", "/States/Bad/Cause"],
+  ["ERROR", "S011", "/States/Bad/Error"],
+  ["ERROR", "S013", "/States/Map/ItemProcessor/ProcessorConfig"],
+  ["ERROR", "S015", "/States/Wait/HeartbeatSeconds"],
+  ["ERROR", "S015", "/States/Wait/TimeoutSeconds"],
+  ["INFO", "J000", "/QueryLanguage"]
+]}

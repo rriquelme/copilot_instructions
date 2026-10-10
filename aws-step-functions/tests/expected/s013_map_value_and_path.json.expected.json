@@ -1,0 +1,6 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S013", "/States/Fan/MaxConcurrencyPath"],
+  ["ERROR", "S013", "/States/Fan/ToleratedFailureCountPath"],
+  ["ERROR", "S013", "/States/Fan/ToleratedFailurePercentagePath"],
+  ["INFO", "J000", "/QueryLanguage"]
+]}

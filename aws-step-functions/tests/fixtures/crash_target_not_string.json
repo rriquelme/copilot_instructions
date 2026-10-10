@@ -1,0 +1,6 @@
+{"StartAt": "Pick", "States": {
+  "Pick": {"Type": "Choice", "Choices": [{"Variable": "$.x", "IsPresent": true, "Next": ["Done"]}], "Default": {"a": 1}},
+  "Work": {"Type": "Pass", "Next": ["Done"]},
+  "Call": {"Type": "Task", "Resource": "arn:aws:states:::sqs:sendMessage", "Parameters": {"QueueUrl": "q", "MessageBody": "m"},
+           "Catch": [{"ErrorEquals": [["States.ALL"]], "Next": {"x": 1}}], "End": true},
+  "Done": {"Type": "Succeed"}}}

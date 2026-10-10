@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["INFO", "J000", "/QueryLanguage"],
+  ["WARNING", "V006", "/States/A/Assign/unused.$"]
+]}

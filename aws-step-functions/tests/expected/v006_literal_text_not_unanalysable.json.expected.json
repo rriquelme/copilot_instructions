@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["WARNING", "J003", "/States/B/Output/html"],
+  ["WARNING", "V006", "/States/A/Assign/unusedVar"]
+]}

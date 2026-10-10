@@ -1,0 +1,7 @@
+{"StartAt":"T","States":{
+ "T":{"Type":"Task","Resource":"arn:aws:states:::lambda:invoke","Parameters":{"FunctionName":"f","Payload.$":"$","InputPath":"not-a-path-just-a-param","ResultPath":"x"},
+   "InputPath":"$$.Execution.Input","OutputPath":"$.Payload","ResultPath":null,"ResultSelector":{"v.$":"$.Payload.items[0:2]"},
+   "Catch":[{"ErrorEquals":["States.ALL"],"ResultPath":"$.error","Next":"W"}],"Next":"W"},
+ "W":{"Type":"Wait","SecondsPath":"$.wait","Next":"M"},
+ "M":{"Type":"Map","ItemsPath":"$.items","ResultPath":"$.results","MaxConcurrencyPath":"$.mc","ItemProcessor":{"StartAt":"S","States":{"S":{"Type":"Succeed"}}},"Next":"F"},
+ "F":{"Type":"Fail","CausePath":"States.Format('bad {}', $.x)","ErrorPath":"$.err"}}}

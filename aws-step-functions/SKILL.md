@@ -32,7 +32,8 @@ Reference files in this folder (read the one you need before writing):
    compose it from listed functions and operators, or say the transformation
    needs a Lambda. Never invent a function.
 3. **Operators:** `=` not `==`, `and`/`or` not `&&`/`||`, `$not(x)` not `!x`,
-   `&` for string concatenation, `??` for defaults.
+   `&` for string concatenation, `$exists(a) ? a : b` for defaults (no `??`
+   or `?:`: those are JSONata 2.1+, Step Functions runs 2.0.6).
 4. **Every transition resolves.** Each `Next`, `Default`, rule `Next`, and
    `Catch.Next` names a state in the same `States` block. Every state except
    `StartAt` is the target of at least one transition. Every non-terminal
@@ -53,7 +54,8 @@ Reference files in this folder (read the one you need before writing):
    `TimeoutSeconds`. Every `lambda:invoke` has the transient-error `Retry`
    from `reference/patterns.md` and `"Output": "{% $states.result.Payload %}"`
    (or reads `.Payload` in `Assign`).
-9. **Guard optional input.** `$states.input.maybe ?? null`. An expression that
+9. **Guard optional input.**
+   `$exists($states.input.maybe) ? $states.input.maybe : null`. An expression that
    yields nothing fails the execution.
 10. **Types.** `Condition` is boolean, `Seconds`/`TimeoutSeconds`/
     `MaxConcurrency` are integers, DynamoDB attribute values are strings inside
@@ -105,8 +107,15 @@ python3 ~/.copilot/skills/aws-step-functions/scripts/lint_asl.py <path-to-defini
 ```
 
 Standard library only, Python 3.9+. Works on plain JSON and on files with an
-embedded definition (Terraform heredoc/templatefile, CloudFormation YAML). Use
-`-` to lint stdin. `--json` gives machine-readable output.
+embedded JSON definition (Terraform heredoc/templatefile with `${...}`,
+CloudFormation JSON, or a JSON string in YAML `DefinitionString`). Terraform
+`jsonencode({...})` and YAML-mapping `Definition:` are not JSON: the linter
+prints the command that renders them to JSON; pipe that into `lint_asl.py -`.
+Use `-` to lint stdin; quote globs (`"sfn/*.json"`). Exit code 0 clean, 1
+errors, 2 nothing linted (fix the S000 line), 3 linter crash. `--json` gives
+machine-readable output. Add `--type EXPRESS`
+for Express workflows (rejects `.sync`, `.waitForTaskToken`, Distributed Map,
+activities).
 
 - Fix every `ERROR`, re-run until `0 error(s)`.
 - Fix every `WARNING` or give a one-line reason it is intended.
@@ -119,10 +128,14 @@ embedded definition (Terraform heredoc/templatefile, CloudFormation YAML). Use
   if installing is not allowed, say so in the report.
 
 Linter codes: `S0xx` structure (targets, orphans, Next/End, fields per type,
-Retry/Catch shape), `J0xx` JSONata mode (forbidden JSONPath fields, `{% %}`
-wrapping, unknown functions, bad operators, `$states.result` placement, syntax),
-`V0xx` variables (never assigned, not on every path, wrong scope, shadowing,
-Pass-only-assign), `P0xx` practice hints.
+Retry/Catch shape, loops that never finish or have no Wait, Resource ARN and
+`.sync`/`.waitForTaskToken` support, Express limits, JSONPath Choice rules),
+`J0xx` JSONata mode (forbidden JSONPath fields, `{% %}` wrapping, unknown
+functions, argument counts, bad operators, `$states.*`/`$states.context.*`
+fields and placement, syntax), `V0xx` variables (never assigned, not on every
+path, wrong scope, shadowing, Pass-only-assign, never read, invalid `Assign`
+names), `P0xx` practice hints (Lambda payload/retry, Retry hygiene, intrinsic
+functions and path syntax in JSONPath states).
 
 ### Step 4. Validate with AWS (when the CLI and credentials are available)
 

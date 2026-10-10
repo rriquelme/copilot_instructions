@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["INFO", "J000", "/QueryLanguage"],
+  ["INFO", "P005", "/States/Iterator"]
+]}

@@ -1,0 +1,2 @@
+{"StartAt":"A","States":{"A":{"Type":"Pass","Assign":{"col·lecció.$":"$.items"},"Next":"B"},
+"B":{"Type":"Pass","Parameters":{"n.$":"States.ArrayLength($col·lecció)"},"End":true}}}

@@ -1,0 +1,10 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "M",
+  "States": {
+    "M": {"Type": "Map", "Items": "{% $states.input.xs %}", "Parameters": {"v": 1},
+          "ItemProcessor": {"StartAt": "S", "States": {"S": {"Type": "Succeed"}}}, "Next": "P"},
+    "P": {"Type": "Pass", "Parameters": {"a": 1}, "ResultPath": "$.x", "Next": "T"},
+    "T": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:s3:listBuckets", "Parameters": {}, "ResultSelector": {}, "End": true}
+  }
+}

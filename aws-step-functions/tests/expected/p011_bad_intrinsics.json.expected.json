@@ -1,0 +1,12 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "P011", "/States/P/Parameters/a.$"],
+  ["ERROR", "P011", "/States/P/Parameters/b.$"],
+  ["ERROR", "P011", "/States/P/Parameters/c.$"],
+  ["ERROR", "P011", "/States/P/Parameters/d.$"],
+  ["ERROR", "P011", "/States/P/Parameters/e.$"],
+  ["ERROR", "P011", "/States/P/Parameters/f.$"],
+  ["ERROR", "P011", "/States/P/Parameters/g.$"],
+  ["ERROR", "P011", "/States/P/Parameters/h.$"],
+  ["ERROR", "P011", "/States/P/Parameters/i.$"],
+  ["INFO", "J000", "/QueryLanguage"]
+]}

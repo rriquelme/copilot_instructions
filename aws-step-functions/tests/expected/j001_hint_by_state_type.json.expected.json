@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J001", "/States/M/Parameters"],
+  ["ERROR", "J001", "/States/P/Parameters"],
+  ["ERROR", "J001", "/States/P/ResultPath"],
+  ["ERROR", "J001", "/States/T/Parameters"],
+  ["ERROR", "J001", "/States/T/ResultSelector"]
+]}

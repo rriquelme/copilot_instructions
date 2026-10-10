@@ -1,0 +1,6 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S009", "/States/A/Choices"],
+  ["INFO", "J000", "/QueryLanguage"],
+  ["INFO", "P005", "/States/A"],
+  ["WARNING", "S017", "/States/A"]
+]}

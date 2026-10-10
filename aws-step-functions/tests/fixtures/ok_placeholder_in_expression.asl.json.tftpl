@@ -1,0 +1,3 @@
+{"QueryLanguage":"JSONata","StartAt":"Check","States":{
+ "Check":{"Type":"Choice","Choices":[{"Condition":"{% $states.input.amount > ${threshold} %}","Next":"Small"}],"Default":"Small"},
+ "Small":{"Type":"Succeed"}}}

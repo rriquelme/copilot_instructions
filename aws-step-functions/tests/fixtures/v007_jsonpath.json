@@ -1,0 +1,15 @@
+{
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Assign": {
+        "orderId.$": "$.id",
+        "$total.$": "$.total",
+        "count": 1,
+        "$states": 2
+      },
+      "End": true
+    }
+  }
+}

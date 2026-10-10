@@ -1,0 +1,30 @@
+{
+  "Comment": "$ is the context item (not the root) in order-by, group-by, focus/index steps, step calls, filters on call results and transforms: no J009. warn* keys keep the root-context habit warning.",
+  "QueryLanguage": "JSONata",
+  "StartAt": "P",
+  "States": {
+    "P": {
+      "Type": "Pass",
+      "Output": {
+        "okOrderBy": "{% $states.input.items^($.price) %}",
+        "okOrderByDesc": "{% $states.input.items^(>$.price) %}",
+        "okOrderByMulti": "{% $states.input.items^(<$.k, >$.x) %}",
+        "okOrderBySpaces": "{% $states.input.items ^ ( $.price ) %}",
+        "okOrderByInCall": "{% $count($states.input.items^($.price)) %}",
+        "okOrderByInObject": "{% {\"cheapest\": $states.input.items^($.price)[0].name} %}",
+        "okOrderByNestedCall": "{% $states.input.items^($string($.price)) %}",
+        "okGroupBy": "{% $states.input.items{$.k: $.v} %}",
+        "okFocus": "{% $states.input.items@$i.$i.k %}",
+        "okIndex": "{% $states.input.items#$i.$.k %}",
+        "okStepCall": "{% $states.input.items.$string($.price) %}",
+        "okFilterAfterCall": "{% ($f := function() { $states.input.items }; $f()[$.x > 1].x) %}",
+        "okTransform": "{% $states.input.items ~> |$|{\"y\": $.x}| %}",
+        "okLambdaNoDollarDot": "{% $map($states.input.items, function($v) { $v.x }) %}",
+        "okSortLambda": "{% $states.input.items ~> $sort(function($l, $r) { $l.x > $r.x }) %}",
+        "warnRootAfterOrderBy": "{% $count($states.input.items^($.price)) & $.name %}",
+        "warnRootInCallArg": "{% $sort($.items) %}"
+      },
+      "End": true
+    }
+  }
+}

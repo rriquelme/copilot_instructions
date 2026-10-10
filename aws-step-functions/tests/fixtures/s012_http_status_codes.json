@@ -1,0 +1,19 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Call",
+  "States": {
+    "Call": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Arguments": {"ApiEndpoint": "https://api.example.com/v1/x", "Method": "GET",
+                    "InvocationConfig": {"ConnectionArn": "arn:aws:events:us-east-1:123456789012:connection/c/abc"}},
+      "Retry": [
+        {"ErrorEquals": ["States.Http.StatusCode.429", "States.Http.StatusCode.503", "States.Http.Socket"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2, "JitterStrategy": "FULL"},
+        {"ErrorEquals": ["States.Http.StatusCode.5XX"], "MaxAttempts": 1}
+      ],
+      "Catch": [{"ErrorEquals": ["States.Http.StatusCode.404", "States.Http.StatusCode.40"], "Next": "NotFound"}],
+      "End": true
+    },
+    "NotFound": {"Type": "Fail", "Error": "NotFound"}
+  }
+}

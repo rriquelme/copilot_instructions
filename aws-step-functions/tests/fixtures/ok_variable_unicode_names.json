@@ -1,0 +1,9 @@
+{
+  "Comment": "Unicode identifiers are valid variable names, in JSONPath and JSONata states",
+  "StartAt": "A",
+  "States": {
+    "A": {"Type": "Pass", "Assign": {"éclair.$": "$.e", "µs": 5, "ª1": 1, "Größe": 2}, "Next": "B"},
+    "B": {"Type": "Pass", "Parameters": {"e.$": "$éclair", "m.$": "$µs.value", "a.$": "States.Format('{}', $ª1)"}, "Next": "C"},
+    "C": {"Type": "Pass", "QueryLanguage": "JSONata", "Output": "{% $Größe %}", "End": true}
+  }
+}

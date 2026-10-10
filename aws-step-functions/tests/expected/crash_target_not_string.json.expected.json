@@ -1,0 +1,11 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "/States/Call/Catch/0/Next"],
+  ["ERROR", "S002", "/States/Pick/Choices/0/Next"],
+  ["ERROR", "S002", "/States/Pick/Default"],
+  ["ERROR", "S002", "/States/Work/Next"],
+  ["ERROR", "S003", "/States/Call"],
+  ["ERROR", "S003", "/States/Done"],
+  ["ERROR", "S003", "/States/Work"],
+  ["ERROR", "S012", "/States/Call/Catch/0/ErrorEquals"],
+  ["INFO", "J000", "/QueryLanguage"]
+]}

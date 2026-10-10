@@ -1,0 +1,22 @@
+{
+  "service": "orders",
+  "provider": {"name": "aws", "runtime": "python3.12"},
+  "functions": {"hello": {"handler": "h.main"}},
+  "stepFunctions": {
+    "stateMachines": {
+      "flow": {
+        "name": "flow",
+        "definition": {
+          "Comment": "serverless",
+          "StartAt": "Hello",
+          "States": {
+            "Hello": {"Type": "Task", "Resource": {"Fn::GetAtt": ["hello", "Arn"]},
+              "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]}], "Next": "Wait"},
+            "Wait": {"Type": "Wait", "Seconds": 3, "Next": "Q"},
+            "Q": {"Type": "Task", "Resource": "arn:aws:states:::sqs:sendMessage", "Parameters": {"QueueUrl": {"Ref": "Queue"}, "MessageBody.$": "$"}, "End": true}
+          }
+        }
+      }
+    }
+  }
+}

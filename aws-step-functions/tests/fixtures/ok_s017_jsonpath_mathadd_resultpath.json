@@ -1,0 +1,12 @@
+{
+  "StartAt": "Init",
+  "States": {
+    "Init": {"Type": "Pass", "Result": {"index": 0, "count": 5}, "ResultPath": "$.iterator", "Next": "Work"},
+    "Work": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:sqs:sendMessage",
+      "Parameters": {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q", "MessageBody.$": "States.JsonToString($.iterator)"},
+      "ResultPath": null, "Next": "Increment"},
+    "Increment": {"Type": "Pass", "Parameters": {"index.$": "States.MathAdd($.iterator.index, 1)", "count.$": "$.iterator.count"}, "ResultPath": "$.iterator", "Next": "More"},
+    "More": {"Type": "Choice", "Choices": [{"Variable": "$.iterator.index", "NumericLessThanPath": "$.iterator.count", "Next": "Work"}], "Default": "Done"},
+    "Done": {"Type": "Succeed"}
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "Comment": "JSONPath machine migrating one state at a time to JSONata",
+  "StartAt": "GetOrder",
+  "States": {
+    "GetOrder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "Parameters": {"TableName": "Orders", "Key": {"pk": {"S.$": "$.orderId"}}},
+      "Assign": {"orderTotal.$": "$.Item.total.N"},
+      "Next": "Notify"
+    },
+    "Notify": {
+      "Type": "Task",
+      "QueryLanguage": "JSONata",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Arguments": {"TopicArn": "arn:aws:sns:us-east-1:123456789012:orders", "Message": "{% 'Total: ' & $orderTotal %}"},
+      "End": true
+    }
+  }
+}

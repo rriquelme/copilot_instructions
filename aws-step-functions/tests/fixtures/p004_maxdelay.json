@@ -1,0 +1,34 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "T",
+  "States": {
+    "T": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "End": true,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "A"
+          ],
+          "BackoffRate": 1.0,
+          "MaxDelaySeconds": 30
+        },
+        {
+          "ErrorEquals": [
+            "B"
+          ],
+          "BackoffRate": 2,
+          "MaxDelaySeconds": 0
+        },
+        {
+          "ErrorEquals": [
+            "C"
+          ],
+          "BackoffRate": 2,
+          "MaxDelaySeconds": "30"
+        }
+      ]
+    }
+  }
+}

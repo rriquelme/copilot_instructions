@@ -1,0 +1,3 @@
+{"QueryLanguage":"JSONata","StartAt":"A","States":{
+ "A":{"Type":"Pass","Assign":{"unusedVar":1},"Next":"B"},
+ "B":{"Type":"Pass","Output":{"html":"<p>{% raw %}{{x}}{% endraw %}</p>"},"End":true}}}

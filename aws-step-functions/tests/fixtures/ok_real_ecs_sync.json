@@ -1,0 +1,37 @@
+{
+  "Comment": "Run an ECS Fargate task and wait for it (.sync), then start a child workflow and wait for its parsed output",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Run batch task",
+  "States": {
+    "Run batch task": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Arguments": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:123456789012:cluster/batch",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:123456789012:task-definition/report:7",
+        "NetworkConfiguration": {"AwsvpcConfiguration": {"Subnets": ["subnet-0abc", "subnet-0def"], "AssignPublicIp": "DISABLED"}},
+        "Overrides": {"ContainerOverrides": [{"Name": "report", "Environment": [{"Name": "REPORT_DATE", "Value": "{% $states.input.date %}"}]}]}
+      },
+      "TimeoutSeconds": 7200,
+      "Retry": [
+        {"ErrorEquals": ["ECS.AmazonECSException", "ECS.ServerException"], "IntervalSeconds": 10, "MaxAttempts": 3, "BackoffRate": 2},
+        {"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 30, "MaxAttempts": 1}
+      ],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Output": "{% $states.errorOutput %}", "Next": "Report failed"}],
+      "Output": "{% {'date': $states.input.date, 'taskArn': $states.result.TaskArn} %}",
+      "Next": "Publish report"
+    },
+    "Publish report": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution.sync:2",
+      "Arguments": {
+        "StateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:publish-report",
+        "Input": {"date": "{% $states.input.date %}", "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID": "{% $states.context.Execution.Id %}"}
+      },
+      "Output": "{% $states.result.Output %}",
+      "End": true
+    },
+    "Report failed": {"Type": "Fail", "Error": "ReportFailed", "Cause": "{% $states.input.Cause %}"}
+  }
+}

@@ -1,0 +1,18 @@
+{
+ "Resources": {
+  "SM": {
+   "Type": "AWS::StepFunctions::StateMachine",
+   "Properties": {
+    "DefinitionString": "{\"StartAt\":\"A\",\"States\":{\"A\":{\"Type\":\"Pass\",\"End\":true,}}}"
+   }
+  },
+  "SM2": {
+   "Type": "AWS::StepFunctions::StateMachine",
+   "Properties": {
+    "DefinitionString": {
+     "Fn::Sub": "{\"StartAt\":\"A\",\"States\":{\"A\":{\"Type\":\"Pass\",\"Next\":\"X\"}}}"
+    }
+   }
+  }
+ }
+}

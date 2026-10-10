@@ -9,8 +9,8 @@ Every snippet here has been linted. Replace names and ARNs; keep the shape.
   "Type": "Pass",
   "Assign": {
     "orderId": "{% $states.input.orderId %}",
-    "items": "{% $states.input.items ?? [] %}",
-    "requestedBy": "{% $states.input.user.email ?? 'unknown' %}"
+    "items": "{% $exists($states.input.items) ? $states.input.items : [] %}",
+    "requestedBy": "{% $exists($states.input.user.email) ? $states.input.user.email : 'unknown' %}"
   },
   "Next": "Validate"
 }
@@ -198,9 +198,9 @@ input or in variables.
 
 ```json
 "Output": {
-  "note": "{% $states.input.note ?? null %}",
+  "note": "{% $exists($states.input.note) ? $states.input.note : null %}",
   "count": "{% $exists($states.input.items) ? $count($states.input.items) : 0 %}",
-  "email": "{% $lowercase($trim($states.input.email ?? '')) %}"
+  "email": "{% $lowercase($trim($exists($states.input.email) ? $states.input.email : '')) %}"
 }
 ```
 

@@ -1,0 +1,15 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Output": {
+        "a": "{% $states.contxt.Execution.Id %}",
+        "b": "{% $states.inputs.x %}",
+        "c": "{% $states . output %}"
+      },
+      "End": true
+    }
+  }
+}

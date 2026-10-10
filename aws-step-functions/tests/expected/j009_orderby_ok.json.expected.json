@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["WARNING", "J009", "/States/P/Output/warnRootAfterOrderBy"],
+  ["WARNING", "J009", "/States/P/Output/warnRootInCallArg"]
+]}

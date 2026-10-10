@@ -1,0 +1,17 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "P011", "/States/F/CausePath"],
+  ["ERROR", "P012", "/States/C/Choices/0/Variable"],
+  ["ERROR", "P012", "/States/M/ItemsPath"],
+  ["ERROR", "P012", "/States/M/ResultPath"],
+  ["ERROR", "P012", "/States/T/Catch/0/ResultPath"],
+  ["ERROR", "P012", "/States/T/InputPath"],
+  ["ERROR", "P012", "/States/T/OutputPath"],
+  ["ERROR", "P012", "/States/T/Parameters/Payload.$"],
+  ["ERROR", "P012", "/States/T/Parameters/x.$"],
+  ["ERROR", "P012", "/States/T/Parameters/y.$"],
+  ["ERROR", "P012", "/States/T/Parameters/z.$"],
+  ["ERROR", "P012", "/States/T/ResultPath"],
+  ["ERROR", "P012", "/States/W/SecondsPath"],
+  ["INFO", "J000", "/QueryLanguage"],
+  ["INFO", "P005", "/States/T"]
+]}

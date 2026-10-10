@@ -1,0 +1,22 @@
+{
+  "Transform": "AWS::Serverless-2016-10-31",
+  "Resources": {
+    "Flow": {
+      "Type": "AWS::Serverless::StateMachine",
+      "Properties": {
+        "Definition": {
+          "StartAt": "Call",
+          "States": {
+            "Call": {"Type": "Task", "Resource": "arn:aws:states:::lambda:invoke", "Parameters": {"FunctionName": "${FnArn}", "Payload.$": "$"},
+              "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]}], "TimeoutSeconds": 30, "End": true}
+          }
+        },
+        "DefinitionSubstitutions": {"FnArn": {"Fn::GetAtt": ["Fn", "Arn"]}}
+      }
+    },
+    "Flow2": {
+      "Type": "AWS::Serverless::StateMachine",
+      "Properties": {"DefinitionUri": {"Bucket": "b", "Key": "k.json"}}
+    }
+  }
+}

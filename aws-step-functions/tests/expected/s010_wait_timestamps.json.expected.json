@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S010", "/States/Lower/Timestamp"],
+  ["ERROR", "S010", "/States/NoZone/Timestamp"]
+]}

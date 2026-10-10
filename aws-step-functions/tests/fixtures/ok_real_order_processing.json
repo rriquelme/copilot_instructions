@@ -1,0 +1,95 @@
+{
+  "Comment": "Order processing: validate, reserve stock, charge, notify; Retry/Catch with compensation",
+  "QueryLanguage": "JSONata",
+  "TimeoutSeconds": 3600,
+  "StartAt": "Validate order",
+  "States": {
+    "Validate order": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {"FunctionName": "arn:aws:lambda:us-east-1:123456789012:function:validate-order:live", "Payload": "{% $states.input %}"},
+      "Retry": [
+        {"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+         "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2, "JitterStrategy": "FULL"}
+      ],
+      "Catch": [
+        {"ErrorEquals": ["ValidationError"], "Output": "{% {'orderId': $states.input.orderId, 'reason': $states.errorOutput.Cause} %}", "Next": "Reject order"},
+        {"ErrorEquals": ["States.ALL"], "Next": "Order failed"}
+      ],
+      "Assign": {"orderId": "{% $states.result.Payload.orderId %}", "total": "{% $states.result.Payload.total %}", "customer": "{% $states.result.Payload.customer %}"},
+      "Output": "{% $states.result.Payload %}",
+      "Next": "Is large order?"
+    },
+    "Is large order?": {
+      "Type": "Choice",
+      "Choices": [{"Condition": "{% $total > 1000 %}", "Next": "Fraud check"}],
+      "Default": "Reserve stock"
+    },
+    "Fraud check": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:frauddetector:getEventPrediction",
+      "Arguments": {
+        "DetectorId": "orders", "EventId": "{% $orderId %}", "EventTypeName": "order",
+        "EventTimestamp": "{% $now() %}", "Entities": [{"EntityId": "{% $customer.id %}", "EntityType": "customer"}],
+        "EventVariables": {"amount": "{% $string($total) %}"}
+      },
+      "Retry": [{"ErrorEquals": ["FraudDetector.ThrottlingException"], "IntervalSeconds": 2, "MaxAttempts": 4, "BackoffRate": 2, "MaxDelaySeconds": 30}],
+      "Output": "{% $states.input %}",
+      "Next": "Reserve stock"
+    },
+    "Reserve stock": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Arguments": {
+        "TableName": "inventory",
+        "Key": {"sku": {"S": "{% $states.input.sku %}"}},
+        "UpdateExpression": "SET reserved = reserved + :q",
+        "ConditionExpression": "available >= :q",
+        "ExpressionAttributeValues": {":q": {"N": "{% $string($states.input.quantity) %}"}}
+      },
+      "Retry": [{"ErrorEquals": ["DynamoDB.ProvisionedThroughputExceededException", "DynamoDB.InternalServerErrorException"], "IntervalSeconds": 1, "MaxAttempts": 5, "BackoffRate": 2}],
+      "Catch": [{"ErrorEquals": ["DynamoDB.ConditionalCheckFailedException"], "Next": "Out of stock"}],
+      "Output": "{% $states.input %}",
+      "Next": "Charge card"
+    },
+    "Charge card": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {"FunctionName": "charge-card", "Payload": {"orderId": "{% $orderId %}", "amount": "{% $total %}"}},
+      "TimeoutSeconds": 30,
+      "Retry": [
+        {"ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2},
+        {"ErrorEquals": ["States.Timeout"], "MaxAttempts": 1}
+      ],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Assign": {"chargeError": "{% $states.errorOutput %}"}, "Next": "Release stock"}],
+      "Assign": {"chargeId": "{% $states.result.Payload.chargeId %}"},
+      "Next": "Notify customer"
+    },
+    "Notify customer": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Arguments": {
+        "TopicArn": "arn:aws:sns:us-east-1:123456789012:order-events",
+        "Message": "{% $string({'orderId': $orderId, 'chargeId': $chargeId, 'status': 'CONFIRMED'}) %}"
+      },
+      "Output": "{% {'orderId': $orderId, 'chargeId': $chargeId, 'status': 'CONFIRMED'} %}",
+      "Next": "Order confirmed"
+    },
+    "Order confirmed": {"Type": "Succeed"},
+    "Release stock": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Arguments": {
+        "TableName": "inventory",
+        "Key": {"sku": {"S": "{% $states.input.sku %}"}},
+        "UpdateExpression": "SET reserved = reserved - :q",
+        "ExpressionAttributeValues": {":q": {"N": "{% $string($states.input.quantity) %}"}}
+      },
+      "Next": "Payment failed"
+    },
+    "Payment failed": {"Type": "Fail", "Error": "PaymentFailed", "Cause": "{% $string($chargeError) %}"},
+    "Out of stock": {"Type": "Fail", "Error": "OutOfStock", "Cause": "{% 'Not enough stock for order ' & $orderId %}"},
+    "Reject order": {"Type": "Fail", "Error": "InvalidOrder", "Cause": "{% $states.input.reason %}"},
+    "Order failed": {"Type": "Fail", "Error": "OrderFailed"}
+  }
+}

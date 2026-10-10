@@ -1,0 +1,22 @@
+{"StartAt":"Init","States":{
+ "Init":{"Type":"Pass","Assign":{"myVar":{"field":1}},"Next":"P"},
+ "P":{"Type":"Pass","Parameters":{
+   "a.$":"States.Format('Hello {}, it\\'s {} (literal \\{\\})', $.name, States.ArrayLength($.items))",
+   "b.$":"States.Array($.a, 'b, c', 3)",
+   "c.$":"States.Array()",
+   "d.$":"States.MathRandom(1, 100)",
+   "e.$":"States.MathRandom(1, 100, $.seed)",
+   "f.$":"States.JsonMerge($.a, $.b, false)",
+   "g.$":"States.UUID()",
+   "h.$":"States.StringSplit($.csv, ',')",
+   "i.$":"States.Format($.template, $.x)",
+   "j.$":"States.Format('{}', '__TPL__')",
+   "k.$":"States.Format('a {} b', __TPL__)",
+   "l.$":"States.ArrayGetItem(States.ArrayPartition($.a, 2), 0)",
+   "m.$":"$$.Map.Item.Value",
+   "n.$":"$.items[?(@.price < 10)].name",
+   "o.$":"$..id",
+   "p.$":"$myVar.field",
+   "q.$":"$",
+   "r.$":"$['a.b']['c']"
+ },"ResultPath":"$.out","InputPath":"$.in","OutputPath":null,"End":true}}}

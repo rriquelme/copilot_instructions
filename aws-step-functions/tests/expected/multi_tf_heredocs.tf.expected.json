@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "[2:line 17 aws_sfn_state_machine.b] /States/A/Next"],
+  ["ERROR", "V001", "[1:line 4 aws_sfn_state_machine.a] /States/B/Output"],
+  ["INFO", "J000", "[2:line 17 aws_sfn_state_machine.b] /QueryLanguage"],
+  ["INFO", "S000", "[1:line 4 aws_sfn_state_machine.a] /"],
+  ["INFO", "S000", "[2:line 17 aws_sfn_state_machine.b] /"]
+]}

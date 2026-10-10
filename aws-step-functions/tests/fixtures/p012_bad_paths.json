@@ -1,0 +1,8 @@
+{"StartAt":"T","States":{
+ "T":{"Type":"Task","Resource":"arn:aws:states:::lambda:invoke","Parameters":{"FunctionName":"f","Payload.$":"$.a[0","x.$":"$.a.","y.$":"$.a...b","z.$":"$.a['b]"},
+   "InputPath":"input","OutputPath":"$.x)","ResultPath":"$$.Execution.x",
+   "Catch":[{"ErrorEquals":["States.ALL"],"ResultPath":"$..err","Next":"W"}],"Next":"W"},
+ "W":{"Type":"Wait","SecondsPath":"seconds","Next":"M"},
+ "M":{"Type":"Map","ItemsPath":"$.items[*","ResultPath":"$.items[*].r","ItemProcessor":{"StartAt":"S","States":{"S":{"Type":"Succeed"}}},"Next":"C"},
+ "C":{"Type":"Choice","Choices":[{"Variable":"status","StringEquals":"x","Next":"F"}],"Default":"F"},
+ "F":{"Type":"Fail","CausePath":"States.Format('bad {}')","ErrorPath":"$.err"}}}

@@ -1,0 +1,8 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "V001", "/States/B/Output/o"],
+  ["ERROR", "V001", "/States/B/Output/o"],
+  ["ERROR", "V007", "/States/A/Assign/1st"],
+  ["ERROR", "V007", "/States/A/Assign/__"],
+  ["ERROR", "V007", "/States/A/Assign/_tmp"],
+  ["ERROR", "V007", "/States/A/Assign/vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"]
+]}
