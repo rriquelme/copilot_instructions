@@ -5,7 +5,7 @@ the mechanical ones, this page is for writing them right the first time.
 
 ## Top level
 
-```json
+```json-abridged
 {
   "Comment": "...",
   "QueryLanguage": "JSONata",
@@ -77,7 +77,7 @@ everything except Succeed and Fail.
 
 ### Map
 
-```json
+```json-abridged
 "Process items": {
   "Type": "Map",
   "Items": "{% $states.input.items %}",

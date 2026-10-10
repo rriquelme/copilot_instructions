@@ -109,8 +109,10 @@ python3 ~/.copilot/skills/aws-step-functions/scripts/lint_asl.py <path-to-defini
 Standard library only, Python 3.9+. Works on plain JSON and on files with an
 embedded JSON definition (Terraform heredoc/templatefile with `${...}`,
 CloudFormation JSON, or a JSON string in YAML `DefinitionString`). Terraform
-`jsonencode({...})` and YAML-mapping `Definition:` are not JSON: the linter
-prints the command that renders them to JSON; pipe that into `lint_asl.py -`.
+`jsonencode({...})` is converted from HCL and linted (references become
+`__TPL__`); YAML-mapping `Definition:` is linted when PyYAML is installed. If
+either cannot be read (e.g. a `for` expression, no PyYAML), the linter prints
+the command that renders it to JSON; pipe that into `lint_asl.py -`.
 Use `-` to lint stdin; quote globs (`"sfn/*.json"`). Exit code 0 clean, 1
 errors, 2 nothing linted (fix the S000 line), 3 linter crash. `--json` gives
 machine-readable output. Add `--type EXPRESS`
