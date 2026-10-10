@@ -1,0 +1,18 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "Q",
+ "States": {
+  "Q": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::http:invoke",
+   "Arguments": {
+    "ApiEndpoint": "https://x.example.com",
+    "Method": "FETCH",
+    "Authentication": {
+     "ConnectionArn": "arn:aws:events:us-east-1:1:connection/x/y"
+    }
+   },
+   "End": true
+  }
+ }
+}

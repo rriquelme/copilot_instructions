@@ -1,0 +1,79 @@
+{
+  "Comment": "JSONPath order notifications: DynamoDB, SQS, SNS, EventBridge, Lambda",
+  "StartAt": "Store",
+  "States": {
+    "Store": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "orders",
+        "Item": {
+          "pk": {"S.$": "$.orderId"},
+          "total": {"N.$": "States.Format('{}', $.total)"},
+          "status": {"S": "NEW"}
+        }
+      },
+      "ResultPath": null,
+      "Next": "Enrich"
+    },
+    "Enrich": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName": "enrich-order", "Payload.$": "$"},
+      "ResultSelector": {"customer.$": "$.Payload.customer"},
+      "ResultPath": "$.enriched",
+      "Retry": [
+        {"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2}
+      ],
+      "Catch": [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Report failure"}
+      ],
+      "Next": "Queue"
+    },
+    "Queue": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/orders",
+        "MessageBody": {"orderId.$": "$.orderId", "customer.$": "$.enriched.customer", "kind": "new-order"}
+      },
+      "ResultPath": null,
+      "Next": "Notify"
+    },
+    "Notify": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:123456789012:orders",
+        "Message.$": "States.Format('Order {} received', $.orderId)",
+        "Subject": "New order"
+      },
+      "ResultPath": null,
+      "Next": "Emit"
+    },
+    "Emit": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {"Source": "shop.orders", "DetailType": "OrderStored", "EventBusName": "default", "Detail": {"orderId.$": "$.orderId", "status": "stored"}}
+        ]
+      },
+      "End": true
+    },
+    "Report failure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TargetArn": "arn:aws:sns:us-east-1:123456789012:alerts",
+        "Message.$": "States.Format('Order {} failed: {}', $.orderId, $.error.Cause)"
+      },
+      "Next": "Failed"
+    },
+    "Failed": {
+      "Type": "Fail",
+      "Error": "OrderEnrichmentFailed",
+      "Cause": "see the alert"
+    }
+  }
+}

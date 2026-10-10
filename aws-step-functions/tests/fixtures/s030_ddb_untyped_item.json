@@ -1,0 +1,18 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "Q",
+ "States": {
+  "Q": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::dynamodb:putItem",
+   "Arguments": {
+    "TableName": "t",
+    "Item": {
+     "pk": "{% $states.input.id %}",
+     "n": 5
+    }
+   },
+   "End": true
+  }
+ }
+}

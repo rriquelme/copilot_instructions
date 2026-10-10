@@ -1,0 +1,6 @@
+{"QueryLanguage": "JSONata", "StartAt": "Call", "States": {
+  "Call": {"Type": "Task", "Resource": "arn:aws:states:::http:invoke",
+    "Arguments": {"ApiEndpoint": "https://api.example.com/v1/x", "Method": "get",
+      "InvocationConfig": {"ConnectionArn": "arn:aws:events:us-east-1:123456789012:connection/c/1"},
+      "Headers": {"x-amz-date": "now", "host": "api.example.com", "X-Request-Id": "{% $uuid() %}"}},
+    "End": true}}}

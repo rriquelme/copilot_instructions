@@ -1,0 +1,14 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "Q",
+ "States": {
+  "Q": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::sqs:sendMessage",
+   "Arguments": {
+    "MessageBody": "{% $states.input %}"
+   },
+   "End": true
+  }
+ }
+}

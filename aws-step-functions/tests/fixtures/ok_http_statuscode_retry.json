@@ -1,0 +1,25 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "T",
+ "States": {
+  "T": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::http:invoke",
+   "Arguments": {
+    "ApiEndpoint": "https://x.example.com",
+    "Method": "GET",
+    "Authentication": {
+     "ConnectionArn": "c"
+    }
+   },
+   "Retry": [
+    {
+     "ErrorEquals": [
+      "States.Http.StatusCode.429"
+     ]
+    }
+   ],
+   "End": true
+  }
+ }
+}

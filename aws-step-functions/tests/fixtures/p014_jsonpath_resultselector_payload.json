@@ -1,0 +1,7 @@
+{"StartAt": "Get", "States": {
+  "Get": {"Type": "Task", "Resource": "arn:aws:states:::dynamodb:getItem",
+    "Parameters": {"TableName": "t", "Key": {"pk": {"S.$": "$.id"}}},
+    "ResultSelector": {"item.$": "$.Payload.Item"}, "Next": "Child"},
+  "Child": {"Type": "Task", "Resource": "arn:aws:states:::states:startExecution.sync",
+    "Parameters": {"StateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:c", "Input.$": "$"},
+    "OutputPath": "$.Output.result", "End": true}}}

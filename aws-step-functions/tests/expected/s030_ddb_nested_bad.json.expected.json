@@ -1,0 +1,6 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S030", "/States/Put/Arguments/ExpressionAttributeValues/:a"],
+  ["ERROR", "S030", "/States/Put/Arguments/ExpressionAttributeValues/:b"],
+  ["ERROR", "S030", "/States/Put/Arguments/ExpressionAttributeValues/:c"],
+  ["ERROR", "S030", "/States/Put/Arguments/Key/sk"]
+]}

@@ -1,0 +1,5 @@
+{"type": "STANDARD", "diagnostics": [
+  ["INFO", "J000", "/QueryLanguage"],
+  ["WARNING", "P014", "/States/Get/ResultSelector"],
+  ["WARNING", "P015", "/States/Child/OutputPath"]
+]}

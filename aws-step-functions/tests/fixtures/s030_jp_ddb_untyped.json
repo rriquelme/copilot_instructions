@@ -1,0 +1,16 @@
+{
+ "StartAt": "T",
+ "States": {
+  "T": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::dynamodb:putItem",
+   "Parameters": {
+    "TableName": "t",
+    "Item": {
+     "pk.$": "$.id"
+    }
+   },
+   "End": true
+  }
+ }
+}

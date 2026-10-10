@@ -1,0 +1,26 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "T",
+ "States": {
+  "T": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+   "Arguments": {
+    "Bucket": "b",
+    "Key": "k"
+   },
+   "Catch": [
+    {
+     "ErrorEquals": [
+      "States.Runtime"
+     ],
+     "Next": "F"
+    }
+   ],
+   "Next": "F"
+  },
+  "F": {
+   "Type": "Fail"
+  }
+ }
+}

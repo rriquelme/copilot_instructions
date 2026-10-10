@@ -1,0 +1,5 @@
+{"type": "STANDARD", "diagnostics": [
+  ["WARNING", "S034", "/States/T/Retry/1/ErrorEquals"],
+  ["WARNING", "S037", "/States/T/Retry/0/ErrorEquals"],
+  ["WARNING", "S037", "/States/T/Retry/1/ErrorEquals"]
+]}

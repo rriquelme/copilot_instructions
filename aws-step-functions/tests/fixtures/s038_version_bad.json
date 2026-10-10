@@ -1,0 +1,11 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "P",
+ "States": {
+  "P": {
+   "Type": "Pass",
+   "End": true
+  }
+ },
+ "Version": "2.0"
+}

@@ -1,0 +1,6 @@
+{"QueryLanguage": "JSONata", "StartAt": "Put", "States": {
+  "Put": {"Type": "Task", "Resource": "arn:aws:states:::dynamodb:putItem",
+    "Arguments": {"TableName": "t", "Item": {"pk": {"S": "a"}}, "ConditionExpression": "attribute_not_exists(pk)"},
+    "Catch": [{"ErrorEquals": ["DynamoDb.ConditionalCheckFailedException"], "Next": "Exists"}],
+    "End": true},
+  "Exists": {"Type": "Succeed"}}}

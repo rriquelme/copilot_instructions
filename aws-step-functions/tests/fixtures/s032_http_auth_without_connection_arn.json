@@ -1,0 +1,4 @@
+{"QueryLanguage": "JSONata", "StartAt": "Call", "States": {
+  "Call": {"Type": "Task", "Resource": "arn:aws:states:::http:invoke",
+    "Arguments": {"ApiEndpoint": "https://api.example.com/v1/x", "Method": "GET", "Authentication": {"Arn": "arn:aws:events:us-east-1:123456789012:connection/c/1"}},
+    "End": true}}}

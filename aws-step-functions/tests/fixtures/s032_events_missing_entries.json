@@ -1,0 +1,15 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "Q",
+ "States": {
+  "Q": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::events:putEvents",
+   "Arguments": {
+    "Detail": {},
+    "Source": "x"
+   },
+   "End": true
+  }
+ }
+}

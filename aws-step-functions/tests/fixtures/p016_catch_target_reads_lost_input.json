@@ -1,0 +1,31 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "T",
+ "States": {
+  "T": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+   "Arguments": {
+    "Bucket": "b",
+    "Key": "k"
+   },
+   "Catch": [
+    {
+     "ErrorEquals": [
+      "States.ALL"
+     ],
+     "Next": "H"
+    }
+   ],
+   "Next": "OK"
+  },
+  "OK": {
+   "Type": "Succeed"
+  },
+  "H": {
+   "Type": "Fail",
+   "Error": "Failed",
+   "Cause": "{% 'order ' & $states.input.orderId %}"
+  }
+ }
+}

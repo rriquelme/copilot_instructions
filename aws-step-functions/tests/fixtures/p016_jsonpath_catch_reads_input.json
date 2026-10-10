@@ -1,0 +1,8 @@
+{"StartAt": "Charge", "States": {
+  "Charge": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:sqs:sendMessage",
+    "Parameters": {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q", "MessageBody.$": "$.orderId"},
+    "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Refund"}],
+    "Next": "Done"},
+  "Refund": {"Type": "Pass", "Parameters": {"order.$": "$.orderId", "why.$": "$.Cause", "ctx.$": "$$.Execution.Id"}, "Next": "Check"},
+  "Check": {"Type": "Choice", "Choices": [{"Variable": "$.order", "IsPresent": true, "Next": "Done"}], "Default": "Done"},
+  "Done": {"Type": "Succeed"}}}

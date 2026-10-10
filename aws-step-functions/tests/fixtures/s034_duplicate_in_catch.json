@@ -1,0 +1,6 @@
+{"QueryLanguage": "JSONata", "StartAt": "P", "States": {
+  "P": {"Type": "Parallel", "Branches": [{"StartAt": "A", "States": {"A": {"Type": "Fail", "Error": "Broken"}}}],
+    "Retry": [{"ErrorEquals": ["States.TaskFailed"]}, {"ErrorEquals": ["Broken"], "MaxAttempts": 0}],
+    "Catch": [{"ErrorEquals": ["Broken", "Other"], "Next": "H"}, {"ErrorEquals": ["Other"], "Next": "H"}],
+    "End": true},
+  "H": {"Type": "Succeed"}}}

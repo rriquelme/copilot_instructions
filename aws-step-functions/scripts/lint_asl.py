@@ -3917,6 +3917,476 @@ def check_express_limits(definition: dict, diags: Diagnostics, execution_type: s
             diags.warn("S027", f"{loc}/TimeoutSeconds", f"{where} Express execution runs at most 300 seconds (5 minutes), so "
                        f'TimeoutSeconds {st["TimeoutSeconds"]} is never reached. Set "TimeoutSeconds": 300 or less, {fix}')
 
+# Service-integration checks, part B (S030-S039, P013-P016)
+# ---------------------------------------------------------------------------
+
+# "Exception prefix" column of the AWS SDK integrations table: aws-sdk:<service> raises "<Prefix>.<Name>Exception",
+# where <service> is <Prefix> in lowercase (aws-sdk:dynamodb -> DynamoDb, aws-sdk:sfn -> Sfn)
+# https://docs.aws.amazon.com/step-functions/latest/dg/supported-services-awssdk.html#supported-services-awssdk-list
+SDK_ERROR_PREFIXES = {p.lower(): p for p in (
+    "AccessAnalyzer Account AccountAccess Acm AcmPca AgentRegistry AgentRegistryControl AiOps Amp Amplify AmplifyBackend "
+    "AmplifyUiBuilder ApiGateway ApiGatewayV2 AppConfig AppConfigData AppFabric Appflow AppIntegrations "
+    "ApplicationAutoScaling ApplicationCostProfiler ApplicationDiscovery ApplicationInsights ApplicationSignals AppMesh "
+    "AppRunner AppStream AppSync ArcRegionSwitch ArcZonalShift Athena AuditManager AutoScaling AutoScalingPlans B2Bi "
+    "Backup BackupGateway BackupSearch Batch BcmDashboards BcmDataExports BcmPricingCalculator BcmRecommendedActions "
+    "Bedrock BedrockAgent BedrockAgentCore BedrockAgentCoreControl BedrockAgentRuntime BedrockDataAutomation "
+    "BedrockDataAutomationRuntime BedrockRuntime Billing Billingconductor Braket Budgets Chime ChimeSdkIdentity "
+    "ChimeSdkMediaPipelines ChimeSdkMeetings ChimeSdkMessaging ChimeSdkVoice CleanRooms CleanRoomsMl Cloud9 CloudControl "
+    "CloudDirectory CloudFormation CloudFront CloudFrontKeyValueStore CloudHsm CloudHsmV2 CloudSearch CloudTrail "
+    "CloudTrailData CloudWatch CloudWatchLogs Codeartifact CodeBuild CodeCatalyst CodeCommit CodeConnections CodeDeploy "
+    "CodeGuruProfiler CodeGuruReviewer CodeGuruSecurity CodePipeline CodeStarConnections CodestarNotifications "
+    "CognitoIdentity CognitoIdentityProvider CognitoSync Comprehend ComprehendMedical ComputeOptimizer "
+    "ComputeOptimizerAutomation Config Connect ConnectCampaigns ConnectCampaignsV2 ConnectCases ConnectContactLens "
+    "ConnectHealth ConnectParticipant ControlCatalog ControlTower CostAndUsageReport CostExplorer CostOptimizationHub "
+    "CustomerProfiles DatabaseMigration DataBrew DataExchange DataPipeline DataSync DataZone Dax Deadline Detective "
+    "DeviceFarm DevOpsAgent DevOpsGuru DirectConnect Directory DirectoryServiceData Dlm DocDb DocDbElastic Drs Dsql "
+    "DynamoDb DynamoDbStreams Ebs Ec2 Ec2InstanceConnect Ecr EcrPublic Ecs Efs Eks EksAuth ElastiCache ElasticBeanstalk "
+    "ElasticInference ElasticLoadBalancing ElasticLoadBalancingV2 Elasticsearch ElementalInference Emr EmrContainers "
+    "EmrServerless EntityResolution EventBridge Finspace FinspaceData Firehose Fis Fms Forecast Forecastquery "
+    "FraudDetector FreeTier FSx GameLift GameLiftStreams GeoMaps GeoPlaces GeoRoutes Glacier Glue Grafana Greengrass "
+    "GreengrassV2 GroundStation GuardDuty Health HealthLake Iam IamToolbox Identitystore Imagebuilder Inspector2 "
+    "InspectorScan Interconnect InternetMonitor Invoicing Iot IoTAnalytics IotDeviceAdvisor IoTFleetWise IotJobsDataPlane "
+    "IotManagedIntegrations IoTSecureTunneling IoTSiteWise IoTThingsGraph IoTTwinMaker IotWireless Ivs Ivschat "
+    "IvsRealTime Kafka KafkaConnect Kendra KendraRanking Keyspaces KeyspacesStreams Kinesis KinesisAnalytics "
+    "KinesisAnalyticsV2 KinesisVideo KinesisVideoArchivedMedia KinesisVideoMedia KinesisVideoSignaling "
+    "KinesisVideoWebRtcStorage Kms LakeFormation Lambda LambdaCore LambdaMicrovms LaunchWizard LexModelsV2 LexRuntimeV2 "
+    "LicenseManager LicenseManagerLinuxSubscriptions LicenseManagerUserSubscriptions Lightsail Location LookoutEquipment "
+    "LookoutVision M2 Macie2 MailManager ManagedBlockchain ManagedBlockchainQuery MarketplaceCatalog "
+    "MarketplaceCommerceAnalytics MarketplaceDiscovery MarketplaceEntitlement MarketplaceMetering MarketplaceReporting "
+    "MediaConnect MediaConvert MediaLive MediaPackage MediaPackageV2 MediaPackageVod MediaStore MediaTailor "
+    "MedicalImaging MemoryDb Mgn MigrationHub MigrationHubConfig MigrationHubOrchestrator MigrationHubRefactorSpaces "
+    "MigrationHubStrategy Mpa Mq MTurk Mwaa MwaaServerless Neptune NeptuneGraph NetworkFirewall NetworkFlowMonitor "
+    "NetworkManager NetworkMonitor NotificationsContacts NovaAct Oam ObservabilityAdmin Odb Omics OpenSearch "
+    "OpenSearchServerless OpsWorksCm Organizations Osis Outposts PartnerCentralAccount PartnerCentralBenefits "
+    "PartnerCentralChannel PartnerCentralRevenueMeasurement PartnerCentralSelling PaymentCryptography "
+    "PaymentCryptographyData PcaConnectorAd PcaConnectorScep Pcs Personalize PersonalizeEvents PersonalizeRuntime Pi "
+    "Pinpoint PinpointEmail PinpointSmsVoice PinpointSmsVoiceV2 Pipes Polly Pricing PricingPlanManager PrivateNetworks "
+    "Proton QApps QBusiness QConnect QuickSight Ram Rbin Rds RdsData Redshift RedshiftData RedshiftServerless Rekognition "
+    "Repostspace Resiliencehub Resiliencehubv2 ResourceExplorer2 ResourceGroups ResourceGroupsTaggingApi RolesAnywhere "
+    "Route53 Route53Domains Route53GlobalResolver Route53Profiles Route53RecoveryCluster Route53RecoveryControlConfig "
+    "Route53RecoveryReadiness Route53Resolver RtbFabric Rum S3 S3Control S3Files S3Outposts S3Tables S3Vectors SageMaker "
+    "SageMakerA2IRuntime SageMakerFeatureStoreRuntime SageMakerGeospatial SagemakerJobRuntime SageMakerMetrics "
+    "SageMakerRuntime SageMakerRuntimeHttp2 Savingsplans Scheduler Schemas SecretsManager SecurityAgent SecurityHub "
+    "SecurityIr SecurityLake ServerlessApplicationRepository ServiceCatalog ServiceCatalogAppRegistry ServiceDiscovery "
+    "ServiceQuotas Ses SesV2 Sfn Shield Signer SignerData Signin SimpleDbV2 SimSpaceWeaver Sms Snowball "
+    "SnowDeviceManagement Sns SocialMessaging Sqs Ssm SsmContacts SsmGuiConnect SsmIncidents SsmQuickSetup SsmSap Sso "
+    "SsoAdmin SsoOidc StorageGateway Sts SupplyChain Support SupportApp SupportAuthz Sustainability Swf Synthetics "
+    "TaxSettings Textract TimestreamInfluxDb TimestreamQuery TimestreamWrite Tnb Transcribe Transfer Translate "
+    "TrustedAdvisor Uxc VerifiedPermissions VoiceId VpcLattice Waf WafRegional Wafv2 WellArchitected Wickr Wisdom "
+    "WorkDocs WorkMail WorkMailMessageFlow WorkSpaces WorkspacesInstances WorkSpacesThinClient WorkSpacesWeb XRay "
+).split()}
+DDB_TYPES = ("S", "N", "B", "BOOL", "NULL", "M", "L", "SS", "NS", "BS")
+DDB_TYPED_FIELDS = ("Item", "Key", "ExpressionAttributeValues")
+# Required request parameters (from each API reference); one inner tuple = "one of these"
+REQUIRED_PARAMS = {
+    "sqs:sendMessage": (("QueueUrl",), ("MessageBody",)),
+    "sns:publish": (("TopicArn", "TargetArn", "PhoneNumber"), ("Message",)),
+    "events:putEvents": (("Entries",),),
+    "eventbridge:putEvents": (("Entries",),),
+    "dynamodb:getItem": (("TableName",), ("Key",)),
+    "dynamodb:deleteItem": (("TableName",), ("Key",)),
+    "dynamodb:updateItem": (("TableName",), ("Key",)),
+    "dynamodb:putItem": (("TableName",), ("Item",)),
+    "states:startExecution": (("StateMachineArn",),),
+    "sfn:startExecution": (("StateMachineArn",),),
+    "http:invoke": (("ApiEndpoint",), ("Method",)),
+}
+HTTP_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD")
+# Headers an HTTP Task must not set (the task fails with States.Runtime)
+# https://docs.aws.amazon.com/step-functions/latest/dg/call-https-apis.html#connect-http-task-fields
+HTTP_FORBIDDEN_HEADERS = {h.lower() for h in (
+    "A-IM Accept-Charset Accept-Datetime Accept-Encoding Authorization Cache-Control Connection Content-Encoding "
+    "Content-MD5 Date Expect Forwarded From Host HTTP2-Settings If-Match If-Modified-Since If-None-Match If-Range "
+    "If-Unmodified-Since Max-Forwards Origin Pragma Proxy-Authorization Referer Server TE Trailer Transfer-Encoding "
+    "Upgrade Via Warning").split()}
+HTTP_FORBIDDEN_HEADER_PREFIXES = ("x-forwarded-", "x-amz-", "x-amzn-")
+MAX_SECONDS = 99_999_999  # Wait Seconds, Retry IntervalSeconds/MaxAttempts maximum (state-wait.html, concepts-error-handling.html)
+MAX_PAYLOAD = 256 * 1024  # bytes: state input/output quota (service-quotas.html)
+MAX_DEFINITION = 1024 * 1024  # bytes: state machine definition quota (service-quotas.html)
+RESULT_PAYLOAD_RE = re.compile(r"\$states\s*\.\s*result\s*\.\s*Payload(?![\wÀ-￿])")
+RESULT_OUTPUT_FIELD_RE = re.compile(r"\$states\s*\.\s*result\s*\.\s*Output\s*[.\[]")
+JSONPATH_INPUT_FIELD_RE = re.compile(r"(?<![\w$])\$\.([A-Za-z_]\w*)")
+
+
+def integration_of(res: Any) -> Optional[tuple[str, str, str, str]]:
+    """(kind, service, action, suffix) of an optimized ("opt") or AWS SDK ("sdk") Task Resource, else None
+    (Lambda function / activity ARNs, malformed or templated resources)."""
+    if not isinstance(res, str) or is_expression(res):
+        return None
+    m = RESOURCE_INTEGRATION_RE.match(RESOURCE_PLACEHOLDER_RE.sub("__TPL__", res))
+    if not m or "__TPL__" in m.group(2) + m.group(3):
+        return None
+    service, rest = m.group(2), m.group(3)
+    suffix = next((s for s in RESOURCE_SUFFIXES if rest.endswith(s)), "")
+    rest = rest[:len(rest) - len(suffix)]
+    if service == "aws-sdk":
+        parts = rest.split(":")
+        return ("sdk", parts[0], parts[1], suffix) if len(parts) == 2 and all(parts) and not suffix.startswith(".sync") else None
+    supported = INTEGRATION_SUFFIXES.get(f"{service}:{rest}", INTEGRATION_SUFFIXES.get(f"{service}:*"))
+    if ":" in rest or (suffix == ".sync:2" and f"{service}:{rest}" != "states:startExecution") or             (suffix and supported is not None and suffix not in supported):
+        return None  # S019 already reports the resource; its parameters may belong to another action
+    return ("opt", service, rest, suffix)
+
+
+def task_args(st: dict, is_jsonata: bool) -> Any:
+    return st.get("Arguments") if is_jsonata else st.get("Parameters")
+
+
+def ddb_value_problem(v: Any) -> Optional[str]:
+    """Why a literal DynamoDB AttributeValue is not one (None = fine or not checkable)."""
+    if not isinstance(v, dict) or len(v) != 1:
+        return ('must be a typed attribute value: an object with exactly one type key, e.g. {"S": "text"}, {"N": "42"}, '
+                '{"BOOL": true}, {"M": {...}}, {"L": [...]}')
+    k, val = next(iter(v.items()))
+    if k.endswith(".$"):
+        return None if k[:-2] in DDB_TYPES else f'"{k}" is not a DynamoDB type ({", ".join(DDB_TYPES)})'
+    if k not in DDB_TYPES:
+        return f'"{k}" is not a DynamoDB type ({", ".join(DDB_TYPES)})'
+    if is_expression(val) or is_placeholder(val):
+        return None
+    if k in ("S", "N") and not isinstance(val, str):
+        fixed = json.dumps(val if isinstance(val, str) else json.dumps(val))
+        return f'{k} values are strings in the DynamoDB API: write {{"{k}": {fixed}}}'
+    if k in ("SS", "NS") and isinstance(val, list) and any(not isinstance(x, str) for x in val):
+        return f'{k} elements are strings in the DynamoDB API, e.g. {{"{k}": ["1", "2"]}}'
+    inner = val.items() if k == "M" and isinstance(val, dict) else enumerate(val) if k == "L" and isinstance(val, list) else ()
+    for name, x in inner:
+        if isinstance(name, str) and name.endswith(".$") or is_expression(x) or is_placeholder(x):
+            continue
+        p = ddb_value_problem(x)
+        if p:
+            return f'inside "{k}", {json.dumps(name) if isinstance(name, str) else f"element {name}"} {p}'
+    return None
+
+
+def check_ddb_typed_values(args: dict, loc: str, is_jsonata: bool, diags: Diagnostics) -> None:
+    """S030: Item / Key / ExpressionAttributeValues use DynamoDB typed attribute values ({"S": "a"}, {"N": "5"})
+    https://docs.aws.amazon.com/step-functions/latest/dg/connect-ddb.html"""
+    for field in DDB_TYPED_FIELDS:
+        m = args.get(field)
+        if not isinstance(m, dict) or f"{field}.$" in args:
+            continue  # a whole-map expression / JSONPath value is not checkable
+        for name, v in m.items():
+            aloc = f"{loc}/{field}/{name}"
+            if name.endswith(".$"):
+                if not is_jsonata:
+                    diags.warn("S030", aloc, f'"{name}" puts the plain value of {json.dumps(v)} into {field}, but DynamoDB needs a typed '
+                               f'attribute value; write "{name[:-2]}": {{"S.$": {json.dumps(v)}}} (or "N.$" with a string number, "BOOL.$", ...) '
+                               "- ignore this only if that path already holds a typed value such as {\"S\": \"...\"}")
+            elif is_expression(v):
+                diags.warn("S030", aloc, f'{field} values must be DynamoDB typed attribute values; write "{name}": {{"S": {json.dumps(v)}}} '
+                           '(or "N" with $string(...) for numbers, "BOOL", ...) - ignore this only if the expression already returns a typed '
+                           'value such as {"S": "..."}')
+            elif not is_placeholder(v):
+                p = ddb_value_problem(v)
+                if p:
+                    diags.error("S030", aloc, f'{field} attribute "{name}": {p}')
+
+
+def check_param_casing(args: dict, loc: str, diags: Diagnostics) -> None:
+    """S031: top-level request parameters are PascalCase in Step Functions, even when the service API is camelCase
+    https://docs.aws.amazon.com/step-functions/latest/dg/supported-services-awssdk.html (API naming conventions)"""
+    for k in args:
+        base = k[:-2] if k.endswith(".$") else k
+        if base[:1].isascii() and base[:1].islower() and base[:1].isalpha():
+            fixed = base[0].upper() + base[1:] + k[len(base):]
+            diags.error("S031", f"{loc}/{k}", f'service parameters are PascalCase in Step Functions: rename "{k}" to "{fixed}"')
+
+
+def present_keys(args: dict) -> set[str]:
+    return {(k[:-2] if k.endswith(".$") else k).lower() for k in args}
+
+
+def check_required_params(key: str, args: dict, loc: str, diags: Diagnostics) -> None:
+    """S032: required request parameters of common integrations (literal Arguments/Parameters objects only)."""
+    if any(is_placeholder(k) for k in args):
+        return  # a templated key may be the missing parameter
+    have = present_keys(args)
+    for group in REQUIRED_PARAMS.get(key, ()):
+        if not any(g.lower() in have for g in group):
+            what = f'"{group[0]}"' if len(group) == 1 else " or ".join(f'"{g}"' for g in group)
+            diags.error("S032", loc, f"{key} needs {what} in its parameters; the call fails without it")
+
+
+def check_http_task(st: dict, args: dict, loc: str, state_loc: str, diags: Diagnostics) -> None:
+    """S032/S033/P013: HTTP Task connection, method and headers
+    https://docs.aws.amazon.com/step-functions/latest/dg/call-https-apis.html"""
+    conn_found = False
+    for f in ("Authentication", "InvocationConfig"):
+        v = args.get(f, args.get(f + ".$"))
+        if f not in args and f + ".$" not in args:
+            continue
+        conn_found = True
+        if isinstance(v, dict) and "connectionarn" not in present_keys(v):
+            diags.error("S032", f"{loc}/{f}", f'{f} needs "ConnectionArn": "arn:aws:events:<region>:<account>:connection/<name>/<id>"')
+    if not conn_found:
+        diags.error("S032", loc, 'an HTTP Task needs an EventBridge connection: "InvocationConfig": {"ConnectionArn": '
+                    '"arn:aws:events:<region>:<account>:connection/<name>/<id>"} (or the older "Authentication": {"ConnectionArn": ...})')
+    method = args.get("Method")
+    if isinstance(method, str) and not is_expression(method) and not is_placeholder(method) and method.upper() not in HTTP_METHODS:
+        diags.error("S033", f"{loc}/Method", f'Method must be one of {", ".join(HTTP_METHODS)} (got {json.dumps(method)})')
+    headers = args.get("Headers")
+    if isinstance(headers, dict):
+        for h in headers:
+            name = (h[:-2] if h.endswith(".$") else h).lower()
+            if name in HTTP_FORBIDDEN_HEADERS or name.startswith(HTTP_FORBIDDEN_HEADER_PREFIXES):
+                extra = (" - put credentials in the EventBridge connection (API key, Basic or OAuth), not in Headers"
+                         if name in ("authorization", "proxy-authorization") else "")
+                diags.error("S033", f"{loc}/Headers/{h}", f'HTTP Tasks cannot set the "{h}" header (the task fails with States.Runtime); remove it{extra}')
+    ts = st.get("TimeoutSeconds")
+    if is_int(ts) and ts > 60:
+        diags.info("P013", f"{state_loc}/TimeoutSeconds", "an HTTP request times out after 60 seconds (hard quota, error "
+                   f"States.Http.Socket) whatever TimeoutSeconds says, so {ts} only bounds retries; set \"TimeoutSeconds\": 60 or less")
+
+
+def check_error_matchers(st: dict, loc: str, integ: Optional[tuple[str, str, str, str]], diags: Diagnostics) -> None:
+    """S034 retriers/catchers that can never match, S035 Catch on States.Runtime, S037 AWS SDK error names
+    https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html"""
+    for kind in ("Retry", "Catch"):
+        seen: dict[str, int] = {}
+        task_failed: Optional[int] = None
+        for i, r in enumerate(as_list(st.get(kind))):
+            ee = r.get("ErrorEquals") if isinstance(r, dict) else None
+            if not isinstance(ee, list):
+                continue
+            eloc = f"{loc}/{kind}/{i}/ErrorEquals"
+            names = [e for e in ee if isinstance(e, str)]
+            for e in names:
+                if e in seen:
+                    diags.warn("S034", eloc, f'"{e}" is already listed in {kind} entry {seen[e]}, which matches first, so it never reaches '
+                               "this entry; remove it here or merge the two entries")
+                elif task_failed is not None and st.get("Type") == "Task" and not e.startswith("States."):
+                    diags.warn("S034", eloc, f'"{e}" can never match here: {kind} entry {task_failed} lists States.TaskFailed, which already '
+                               "matches every task error except States.Timeout; move this entry before that one")
+                if kind == "Catch" and e == "States.Runtime":
+                    diags.warn("S035", eloc, "States.Runtime is a terminal error: it always fails the execution and no Catch ever "
+                               "catches it; remove it and fix the cause (e.g. a path or expression applied to missing data)")
+                if integ is not None:
+                    check_sdk_error_name(e, eloc, integ, diags)
+            for e in names:
+                seen.setdefault(e, i)
+            if task_failed is None and "States.TaskFailed" in names:
+                task_failed = i
+
+
+def check_sdk_error_name(e: str, loc: str, integ: tuple[str, str, str, str], diags: Diagnostics) -> None:
+    """S037: aws-sdk errors are "<Prefix>.<Name>Exception" with the documented prefix casing; the optimized
+    DynamoDB integration uses "DynamoDB." while aws-sdk:dynamodb uses "DynamoDb."
+    https://docs.aws.amazon.com/step-functions/latest/dg/supported-services-awssdk.html, connect-ddb.html"""
+    kind, service, _action, _suffix = integ
+    prefix, dot, name = e.partition(".")
+    if not dot or not name:
+        return
+    if kind == "opt":
+        if service == "dynamodb" and prefix != "DynamoDB" and prefix.lower() == "dynamodb":
+            diags.error("S037", loc, f'error names are case-sensitive and the optimized DynamoDB integration raises "DynamoDB.<Name>" '
+                        f'(uppercase DB): use "DynamoDB.{name}" ("DynamoDb." is only for aws-sdk:dynamodb)')
+        return
+    expected = SDK_ERROR_PREFIXES.get(service.lower())
+    if expected is None or prefix.lower() != expected.lower():
+        return
+    if prefix != expected:
+        diags.error("S037", loc, f'error names are case-sensitive: aws-sdk:{service} errors start with "{expected}.", so use '
+                    f'"{expected}.{name}" instead of "{e}"')
+    elif not name.endswith("Exception") and service != "lambda":
+        diags.warn("S037", loc, f'AWS SDK integration errors always end in "Exception", even when the service API reference omits it: '
+                   f'use "{expected}.{name}Exception"')
+
+
+def check_result_shape(st: dict, loc: str, is_jsonata: bool, integ: tuple[str, str, str, str], diags: Diagnostics) -> None:
+    """P014 $states.result.Payload on a task that is not a Lambda invoke; P015 Output.<field> after startExecution.sync
+    https://docs.aws.amazon.com/step-functions/latest/dg/connect-lambda.html, connect-stepfunctions.html"""
+    kind, service, action, suffix = integ
+    sync_v1 = kind == "opt" and service == "states" and action == "startExecution" and suffix == ".sync"
+    has_payload = service in ("lambda", "iotdata", "iot-data") or (service == "s3" and action == "selectObjectContent")
+    if is_jsonata:
+        sources = [(f, st[f]) for f in ("Output", "Assign") if f in st]
+        payload_hit = output_hit = ""
+        for f, v in sources:
+            text = json.dumps(v)
+            payload_hit = payload_hit or (f if RESULT_PAYLOAD_RE.search(text) else "")
+            output_hit = output_hit or (f if RESULT_OUTPUT_FIELD_RE.search(text) else "")
+    else:
+        rs = st.get("ResultSelector")
+        paths = [v for k, v in (rs.items() if isinstance(rs, dict) else []) if k.endswith(".$") and isinstance(v, str)]
+        payload_hit = "ResultSelector" if any(re.match(r"^\$\.Payload(?![\w])", p) for p in paths) else ""
+        op = st.get("OutputPath")
+        output_hit = ("ResultSelector" if any(re.match(r"^\$\.Output[.\[]", p) for p in paths) else
+                      "OutputPath" if "ResultPath" not in st and isinstance(op, str) and re.match(r"^\$\.Output[.\[]", op) else "")
+    if payload_hit and not has_payload:
+        what = f"aws-sdk:{service}:{action}" if kind == "sdk" else f"{service}:{action}"
+        diags.warn("P014", f"{loc}/{payload_hit}", f"{what} returns the service's response fields directly; only Lambda invoke wraps its result "
+                   'in "Payload", so this reads nothing. Use the response field itself (e.g. ' +
+                   ("$states.result.Item" if is_jsonata else '"$.Item"') + " for DynamoDB getItem)")
+    if output_hit and sync_v1:
+        fix = ('"$parse($states.result.Output).<field>"' if is_jsonata else '"States.StringToJson($.Output)" in ResultSelector')
+        diags.warn("P015", f"{loc}/{output_hit}", 'with "states:startExecution.sync" the child output "Output" is a JSON string, so '
+                   'Output.<field> reads nothing; use "arn:aws:states:::states:startExecution.sync:2" (Output is JSON) or ' + fix)
+
+
+def input_fields_read(st: dict, is_jsonata: bool) -> set[str]:
+    """Top-level state-input fields a state reads: $states.input.<x> in JSONata, "$.x" in JSONPath input-side fields."""
+    found: set[str] = set()
+    if is_jsonata:
+        for _path, raw, _r, _e in collect_expressions(st):
+            for m in STATES_INPUT_PATH_RE.finditer(strip_literals(raw)):
+                found.add(re.sub(r"\s+", "", m.group(1)).lstrip(".").split(".")[0])
+        return found
+
+    def visit(key_path: str, key: str, v: Any) -> None:
+        top = key_path.split("/")[0]
+        if not isinstance(v, str) or top in ("ResultSelector", "ResultPath", "OutputPath", "Catch", "Retry"):
+            return
+        if key.endswith(".$") or key == "Variable" or (key.endswith("Path") and key != "ResultPath"):
+            if v.startswith("States."):
+                v = re.sub(r"'(?:\\.|[^'\\])*'", "''", v)
+            found.update(JSONPATH_INPUT_FIELD_RE.findall(v))
+    walk_keys(st, visit, ["ItemProcessor", "Iterator", "Branches"])
+    return found
+
+
+def check_catch_lost_input(states: dict, start_at: Any, base: str, top_lang: str, diags: Diagnostics) -> None:
+    """P016: a state reached only through catchers without Output (JSONata) / ResultPath (JSONPath) receives just
+    {"Error", "Cause"}; reading any other input field there fails
+    https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html#error-handling-error-output"""
+    normal: set[str] = set()
+    catchers: dict[str, list[tuple[str, int, bool]]] = {}
+    for name, st in states.items():
+        if not isinstance(st, dict):
+            continue
+        normal.update(t for t in [st.get("Next"), st.get("Default")] if isinstance(t, str))
+        normal.update(r.get("Next") for r in as_list(st.get("Choices")) if isinstance(r, dict) and isinstance(r.get("Next"), str))
+        for i, c in enumerate(as_list(st.get("Catch"))):
+            if isinstance(c, dict) and isinstance(c.get("Next"), str):
+                catchers.setdefault(c["Next"], []).append((name, i, "Output" in c or "ResultPath" in c))
+    for target, srcs in catchers.items():
+        tst = states.get(target)
+        if not isinstance(tst, dict) or any(keeps for _n, _i, keeps in srcs):
+            continue
+        also_normal = target in normal or target == start_at
+        is_jsonata = tst.get("QueryLanguage", top_lang) == "JSONata"
+        lost = sorted(input_fields_read(tst, is_jsonata) - {"Error", "Cause"})
+        if not lost:
+            continue
+        src_name, src_i, _k = srcs[0]
+        src_jsonata = (states.get(src_name) or {}).get("QueryLanguage", top_lang) == "JSONata"
+        fix = ('"Output": "{% $merge([$states.input, {\'error\': $states.errorOutput}]) %}"' if src_jsonata else '"ResultPath": "$.error"')
+        fields = ", ".join(f'"{x}"' for x in lost)
+        if also_normal:
+            diags.info("P016", f"{base}/{src_name}/Catch/{src_i}", f'"{target}" reads {fields} from its input, but when it is reached '
+                       f'through this Catch its input is only {{"Error", "Cause"}} (no {"Output" if src_jsonata else "ResultPath"} on the '
+                       f"catcher); if that path matters, keep the original input with {fix}")
+            continue
+        diags.warn("P016", f"{base}/{src_name}/Catch/{src_i}", f'"{target}" is reached only through Catch, and a catcher without '
+                   f'{"Output" if src_jsonata else "ResultPath"} passes only {{"Error", "Cause"}} as its input, so "{target}" reading '
+                   f"{fields} from its input finds nothing; keep the original input in the catcher with {fix} "
+                   '(then read the error from "error")')
+
+
+def check_numeric_and_misc(st: dict, loc: str, diags: Diagnostics) -> None:
+    """S038: documented maxima (99999999), Comment type, Credentials.RoleArn
+    https://docs.aws.amazon.com/step-functions/latest/dg/state-wait.html, state-task.html, concepts-error-handling.html"""
+    stype = st.get("Type")
+    fields = ("Seconds",) if stype == "Wait" else ("TimeoutSeconds", "HeartbeatSeconds") if stype == "Task" else ()
+    for f in fields:
+        v = st.get(f)
+        if is_int(v) and v > MAX_SECONDS:
+            diags.error("S038", f"{loc}/{f}", f"{f} can be at most 99999999 (and an execution runs for at most one year, 31536000 s); got {v}")
+    for i, r in enumerate(as_list(st.get("Retry"))):
+        for f in ("IntervalSeconds", "MaxAttempts"):
+            v = r.get(f) if isinstance(r, dict) else None
+            if is_int(v) and v > MAX_SECONDS:
+                diags.error("S038", f"{loc}/Retry/{i}/{f}", f"{f} can be at most 99999999; got {v}")
+    if "Comment" in st and not isinstance(st["Comment"], str):
+        diags.error("S038", f"{loc}/Comment", 'Comment must be a string, e.g. "Comment": "what this state does"')
+    for kind in ("Retry", "Catch"):
+        for i, r in enumerate(as_list(st.get(kind))):
+            if isinstance(r, dict) and "Comment" in r and not isinstance(r["Comment"], str):
+                diags.error("S038", f"{loc}/{kind}/{i}/Comment", "Comment must be a string")
+    if stype == "Task" and "Credentials" in st:
+        cred = st["Credentials"]
+        if isinstance(cred, dict):
+            # only an empty object: any other key (e.g. "Role") is already S025 with a did-you-mean "RoleArn"
+            if not cred:
+                diags.error("S038", f"{loc}/Credentials", 'Credentials needs "RoleArn": "arn:aws:iam::<account>:role/<name>" '
+                            '(the role to assume for this task)')
+        elif not is_expression(cred) and not is_placeholder(cred):
+            diags.error("S038", f"{loc}/Credentials", 'Credentials must be an object: "Credentials": {"RoleArn": "arn:aws:iam::<account>:role/<name>"}')
+    if stype == "Fail":
+        err = st.get("Error")
+        if isinstance(err, str) and err.startswith("States.") and not is_expression(err):
+            diags.warn("S036", f"{loc}/Error", f'custom error names cannot begin with "States." (reserved for built-in errors); '
+                       f'use your own name, e.g. "{err[7:] or "MyError"}"')
+
+
+def check_literal_sizes(st: dict, loc: str, diags: Diagnostics) -> None:
+    """S039: a literal field that alone exceeds the 256 KiB state input/output quota (service-quotas.html)."""
+    for f in ("Output", "Assign", "Arguments", "Parameters", "Result", "ItemSelector", "ResultSelector"):
+        if f in st:
+            size = len(json.dumps(st[f], ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            if size > MAX_PAYLOAD:
+                diags.warn("S039", f"{loc}/{f}", f"{f} is {size} bytes of literal JSON, more than the 256 KiB (262144 bytes) a state can pass; "
+                           "the execution fails with States.DataLimitExceeded - store the data in S3 (or DynamoDB) and pass a reference")
+
+
+def check_states_part_b(states: Any, start_at: Any, base: str, top_lang: str, diags: Diagnostics, big: bool) -> None:
+    if not isinstance(states, dict):
+        return
+    for name, st in states.items():
+        if not isinstance(st, dict):
+            continue
+        loc = f"{base}/{name}"
+        is_jsonata = st.get("QueryLanguage", top_lang) == "JSONata"
+        check_numeric_and_misc(st, loc, diags)
+        if big:
+            check_literal_sizes(st, loc, diags)
+        integ = integration_of(st.get("Resource")) if st.get("Type") == "Task" else None
+        if st.get("Type") in RETRY_CATCH_ALLOWED:
+            check_error_matchers(st, loc, integ, diags)
+        if integ is not None:
+            check_task_integration(st, loc, is_jsonata, integ, diags)
+        if st.get("Type") == "Map":
+            key = "ItemProcessor" if "ItemProcessor" in st else "Iterator"
+            proc = st.get(key)
+            if isinstance(proc, dict):
+                check_states_part_b(proc.get("States"), proc.get("StartAt"), f"{loc}/{key}/States", top_lang, diags, big)
+        if st.get("Type") == "Parallel":
+            for i, b in enumerate(as_list(st.get("Branches"))):
+                if isinstance(b, dict):
+                    check_states_part_b(b.get("States"), b.get("StartAt"), f"{loc}/Branches/{i}/States", top_lang, diags, big)
+    check_catch_lost_input(states, start_at, base, top_lang, diags)
+
+
+def check_task_integration(st: dict, loc: str, is_jsonata: bool, integ: tuple[str, str, str, str], diags: Diagnostics) -> None:
+    kind, service, action, _suffix = integ
+    check_result_shape(st, loc, is_jsonata, integ, diags)
+    args = task_args(st, is_jsonata)
+    if not isinstance(args, dict):
+        return
+    aloc = f"{loc}/{'Arguments' if is_jsonata else 'Parameters'}"
+    check_param_casing(args, aloc, diags)
+    key = f"{service}:{action}"
+    check_required_params(key, args, aloc, diags)
+    if service == "dynamodb" and (kind == "sdk" or action in ("putItem", "getItem", "updateItem", "deleteItem")):
+        check_ddb_typed_values(args, aloc, is_jsonata, diags)
+    if kind == "opt" and key == "http:invoke":
+        check_http_task(st, args, aloc, loc, diags)
+
+
+def check_part_b(definition: dict, diags: Diagnostics) -> None:
+    """Service-integration and value checks S030-S039, P013-P016 (see the functions above)."""
+    if "Version" in definition and definition["Version"] != "1.0" and not is_placeholder(definition["Version"]):
+        diags.error("S038", "/Version", f'Version must be "1.0" (the only Amazon States Language version; it can also be omitted), '
+                    f'got {json.dumps(definition["Version"])}')  # statemachine-structure.html
+    if "Comment" in definition and not isinstance(definition["Comment"], str):
+        diags.error("S038", "/Comment", 'Comment must be a string, e.g. "Comment": "what this state machine does"')
+    size = len(json.dumps(definition, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    if size > MAX_DEFINITION:
+        diags.error("S039", "/", f"the definition is {size} bytes, more than the 1 MB (1048576 bytes) quota for a state machine definition; "
+                    "move large literals to S3/DynamoDB or split the workflow into child state machines")
+    top_lang = definition.get("QueryLanguage", "JSONPath")
+    check_states_part_b(definition.get("States"), definition.get("StartAt"), "/States", top_lang, diags, size > MAX_PAYLOAD)
+
 
 # ---------------------------------------------------------------------------
 # Entry points
@@ -3954,6 +4424,7 @@ def lint_definition(definition: dict, diags: Diagnostics, jsonata=None, executio
     check_nested_fields(definition, diags)
     check_distributed_map_config(definition, diags)
     check_express_limits(definition, diags, execution_type)
+    check_part_b(definition, diags)
     if execution_type == "EXPRESS":
         check_express_mode(definition, diags)
 

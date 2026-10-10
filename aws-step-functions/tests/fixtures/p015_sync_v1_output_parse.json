@@ -1,0 +1,16 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "T",
+ "States": {
+  "T": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::states:startExecution.sync",
+   "Arguments": {
+    "StateMachineArn": "arn:aws:states:us-east-1:1:stateMachine:x",
+    "Input": {}
+   },
+   "Output": "{% $states.result.Output.x %}",
+   "End": true
+  }
+ }
+}

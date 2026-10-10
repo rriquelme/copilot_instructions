@@ -58,7 +58,9 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::ecs:runTask.waitForTaskToken",
       "Arguments": {
-        "t": "{% $states.context.Task.Token %}"
+        "Cluster": "c",
+        "TaskDefinition": "td",
+        "Overrides": {"ContainerOverrides": [{"Name": "app", "Environment": [{"Name": "TASK_TOKEN", "Value": "{% $states.context.Task.Token %}"}]}]}
       },
       "TimeoutSeconds": 60,
       "Next": "Glue"
