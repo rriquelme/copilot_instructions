@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S033", "/States/Call/Arguments/Headers/host"],
+  ["ERROR", "S033", "/States/Call/Arguments/Headers/x-amz-date"]
+]}

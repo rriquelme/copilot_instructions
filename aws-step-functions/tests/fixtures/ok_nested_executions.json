@@ -1,0 +1,56 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Run child v2",
+  "States": {
+    "Run child v2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution.sync:2",
+      "Arguments": {
+        "StateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:Child",
+        "Input": {"orderId": "{% $states.input.orderId %}", "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID": "{% $states.context.Execution.Id %}"}
+      },
+      "Output": "{% $merge([$states.input, {'child': $states.result.Output.summary}]) %}",
+      "Next": "Run child v1"
+    },
+    "Run child v1": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution.sync",
+      "Arguments": {
+        "StateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:Legacy",
+        "Input": "{% $states.input %}"
+      },
+      "Assign": {"legacyStatus": "{% $states.result.Status %}"},
+      "Output": "{% $merge([$states.input, {'legacy': $parse($states.result.Output).summary}]) %}",
+      "Next": "Fire and forget"
+    },
+    "Fire and forget": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:sfn:startExecution",
+      "Arguments": {
+        "StateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:Audit",
+        "Input": "{% $string({'orderId': $states.input.orderId, 'legacyStatus': $legacyStatus}) %}"
+      },
+      "Retry": [
+        {"ErrorEquals": ["Sfn.ExecutionLimitExceededException"], "IntervalSeconds": 5, "MaxAttempts": 3},
+        {"ErrorEquals": ["States.TaskFailed"], "MaxAttempts": 2},
+        {"ErrorEquals": ["States.Timeout"], "MaxAttempts": 1}
+      ],
+      "Catch": [
+        {"ErrorEquals": ["Sfn.StateMachineDoesNotExistException"], "Next": "Audit missing"},
+        {"ErrorEquals": ["States.ALL"], "Output": "{% $merge([$states.input, {'error': $states.errorOutput}]) %}", "Next": "Audit failed"}
+      ],
+      "Output": "{% $states.input %}",
+      "End": true
+    },
+    "Audit missing": {
+      "Type": "Fail",
+      "Error": "AuditMachineMissing",
+      "Cause": "{% $states.input.Cause %}"
+    },
+    "Audit failed": {
+      "Type": "Fail",
+      "Error": "AuditFailed",
+      "Cause": "{% 'order ' & $states.input.orderId %}"
+    }
+  }
+}

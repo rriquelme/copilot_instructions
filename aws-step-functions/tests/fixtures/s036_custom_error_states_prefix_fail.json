@@ -1,0 +1,11 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "F",
+ "States": {
+  "F": {
+   "Type": "Fail",
+   "Error": "States.MyError",
+   "Cause": "x"
+  }
+ }
+}

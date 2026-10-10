@@ -1,0 +1,44 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Create invoice",
+  "States": {
+    "Create invoice": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Arguments": {
+        "ApiEndpoint": "https://api.stripe.com/v1/invoices",
+        "Method": "POST",
+        "InvocationConfig": {"ConnectionArn": "arn:aws:events:us-east-1:123456789012:connection/Stripe/81210c42-8af1-456b-9c4a-6ff02fc664ac"},
+        "Headers": {"Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": "{% $states.context.Execution.Name %}"},
+        "RequestBody": {"customer": "{% $states.input.customerId %}", "description": "Monthly subscription"},
+        "Transform": {"RequestBodyEncoding": "URL_ENCODED", "RequestEncodingOptions": {"ArrayFormat": "INDICES"}}
+      },
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {"ErrorEquals": ["States.Http.StatusCode.429", "States.Http.StatusCode.503"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2, "JitterStrategy": "FULL"}
+      ],
+      "Catch": [
+        {"ErrorEquals": ["States.Http.StatusCode.400", "States.Http.StatusCode.404"], "Output": "{% $merge([$states.input, {'error': $states.errorOutput}]) %}", "Next": "Invoice rejected"}
+      ],
+      "Output": "{% $merge([$states.input, {'invoice': $states.result.ResponseBody}]) %}",
+      "Next": "Fetch status"
+    },
+    "Fetch status": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Arguments": {
+        "ApiEndpoint": "{% 'https://api.stripe.com/v1/invoices/' & $states.input.invoice.id %}",
+        "Method": "{% $states.input.method ? $states.input.method : 'GET' %}",
+        "Authentication": {"ConnectionArn": "arn:aws:events:us-east-1:123456789012:connection/Stripe/81210c42-8af1-456b-9c4a-6ff02fc664ac"},
+        "QueryParameters": {"expand": "lines"}
+      },
+      "Output": "{% $states.result.ResponseBody %}",
+      "End": true
+    },
+    "Invoice rejected": {
+      "Type": "Fail",
+      "Error": "InvoiceRejected",
+      "Cause": "{% 'customer ' & $states.input.customerId & ': ' & $states.input.error.Cause %}"
+    }
+  }
+}

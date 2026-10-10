@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["INFO", "J000", "/QueryLanguage"],
+  ["WARNING", "S030", "/States/T/Parameters/Item/pk.$"]
+]}

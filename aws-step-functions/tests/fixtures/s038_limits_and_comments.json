@@ -1,0 +1,8 @@
+{"Comment": ["not", "a", "string"], "QueryLanguage": "JSONata", "StartAt": "T", "States": {
+  "T": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:s3:getObject", "Arguments": {"Bucket": "b", "Key": "k"},
+    "HeartbeatSeconds": 100000000,
+    "Retry": [{"ErrorEquals": ["States.Timeout"], "IntervalSeconds": 100000000, "Comment": 1}],
+    "Catch": [{"ErrorEquals": ["States.ALL"], "Comment": {"why": "x"}, "Next": "F"}],
+    "Credentials": "arn:aws:iam::111122223333:role/x",
+    "End": true},
+  "F": {"Type": "Fail", "Error": "Broken"}}}

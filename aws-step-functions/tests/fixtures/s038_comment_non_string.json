@@ -1,0 +1,11 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "P",
+ "States": {
+  "P": {
+   "Type": "Pass",
+   "End": true,
+   "Comment": 5
+  }
+ }
+}

@@ -1,0 +1,6 @@
+{"QueryLanguage": "JSONata", "StartAt": "Put", "States": {
+  "Put": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:dynamodb:updateItem",
+    "Arguments": {"TableName": "t", "Key": {"pk": {"S": "a"}, "sk": {"STRING": "b"}},
+      "UpdateExpression": "SET a = :a, b = :b, c = :c",
+      "ExpressionAttributeValues": {":a": {"M": {"x": "plain"}}, ":b": {"NS": [1, 2]}, ":c": {"S": "x", "N": "1"}}},
+    "End": true}}}

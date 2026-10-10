@@ -1,0 +1,91 @@
+{
+  "Comment": "Order store: typed DynamoDB attribute values through the optimized and AWS SDK integrations",
+  "QueryLanguage": "JSONata",
+  "Version": "1.0",
+  "StartAt": "Save order",
+  "States": {
+    "Save order": {
+      "Type": "Task",
+      "Comment": "conditional put, so a retried execution does not duplicate the order",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Arguments": {
+        "TableName": "orders",
+        "Item": {
+          "pk": {"S": "{% 'ORDER#' & $states.input.orderId %}"},
+          "total": {"N": "{% $string($states.input.total) %}"},
+          "quantity": {"N": "3"},
+          "express": {"BOOL": "{% $states.input.express = true %}"},
+          "giftNote": {"NULL": true},
+          "tags": {"SS": ["new", "web"]},
+          "sizes": {"NS": ["1", "2"]},
+          "address": {"M": {"city": {"S": "{% $states.input.city %}"}, "zip": {"S": "12345"}}},
+          "lines": {"L": [{"M": {"sku": {"S": "A-1"}, "qty": {"N": "1"}}}, {"S": "free gift"}]},
+          "raw": {"B": "dGVzdA=="}
+        },
+        "ConditionExpression": "attribute_not_exists(pk)"
+      },
+      "Retry": [
+        {"ErrorEquals": ["DynamoDB.ProvisionedThroughputExceededException", "DynamoDB.InternalServerErrorException"], "IntervalSeconds": 1, "MaxAttempts": 5, "BackoffRate": 2}
+      ],
+      "Catch": [
+        {"ErrorEquals": ["DynamoDB.ConditionalCheckFailedException"], "Output": "{% $merge([$states.input, {'error': $states.errorOutput}]) %}", "Next": "Already saved"}
+      ],
+      "Output": "{% $states.input %}",
+      "Next": "Read order"
+    },
+    "Already saved": {
+      "Type": "Pass",
+      "Output": {"orderId": "{% $states.input.orderId %}", "duplicate": true},
+      "End": true
+    },
+    "Read order": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "Arguments": {
+        "TableName": "orders",
+        "Key": {"pk": {"S": "{% 'ORDER#' & $states.input.orderId %}"}},
+        "ConsistentRead": true
+      },
+      "Output": "{% $merge([$states.input, {'item': $states.result.Item}]) %}",
+      "Next": "Mark paid"
+    },
+    "Mark paid": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Arguments": {
+        "TableName": "orders",
+        "Key": {"pk": {"S": "{% 'ORDER#' & $states.input.orderId %}"}},
+        "UpdateExpression": "SET #s = :paid, paidAt = :now",
+        "ExpressionAttributeNames": {"#s": "status"},
+        "ExpressionAttributeValues": {":paid": {"S": "PAID"}, ":now": {"S": "{% $now() %}"}}
+      },
+      "Output": "{% $states.input %}",
+      "Next": "Customer orders"
+    },
+    "Customer orders": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:dynamodb:query",
+      "Arguments": {
+        "TableName": "orders",
+        "IndexName": "byCustomer",
+        "KeyConditionExpression": "customerId = :c",
+        "ExpressionAttributeValues": {":c": {"S": "{% $states.input.customerId %}"}},
+        "Limit": 10
+      },
+      "Retry": [
+        {"ErrorEquals": ["DynamoDb.ProvisionedThroughputExceededException"], "IntervalSeconds": 2, "MaxAttempts": 3}
+      ],
+      "Output": "{% $merge([$states.input, {'history': $states.result.Items}]) %}",
+      "Next": "Delete draft"
+    },
+    "Delete draft": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:deleteItem",
+      "Arguments": {
+        "TableName": "drafts",
+        "Key": "{% {'pk': {'S': $states.input.orderId}} %}"
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["INFO", "J000", "/QueryLanguage"],
+  ["WARNING", "P016", "/States/Charge/Catch/0"]
+]}

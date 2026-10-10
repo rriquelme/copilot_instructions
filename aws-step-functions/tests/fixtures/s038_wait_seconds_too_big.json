@@ -1,0 +1,11 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "W",
+ "States": {
+  "W": {
+   "Type": "Wait",
+   "Seconds": 100000000,
+   "End": true
+  }
+ }
+}

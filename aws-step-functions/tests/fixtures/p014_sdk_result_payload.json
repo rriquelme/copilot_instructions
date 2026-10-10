@@ -1,0 +1,20 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "T",
+ "States": {
+  "T": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::aws-sdk:dynamodb:getItem",
+   "Arguments": {
+    "TableName": "t",
+    "Key": {
+     "pk": {
+      "S": "a"
+     }
+    }
+   },
+   "Output": "{% $states.result.Payload %}",
+   "End": true
+  }
+ }
+}

@@ -1,0 +1,8 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S038", "/Comment"],
+  ["ERROR", "S038", "/States/T/Catch/0/Comment"],
+  ["ERROR", "S038", "/States/T/Credentials"],
+  ["ERROR", "S038", "/States/T/HeartbeatSeconds"],
+  ["ERROR", "S038", "/States/T/Retry/0/Comment"],
+  ["ERROR", "S038", "/States/T/Retry/0/IntervalSeconds"]
+]}

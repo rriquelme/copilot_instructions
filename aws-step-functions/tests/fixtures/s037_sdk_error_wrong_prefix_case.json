@@ -1,0 +1,30 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "T",
+ "States": {
+  "T": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::aws-sdk:dynamodb:putItem",
+   "Arguments": {
+    "TableName": "t",
+    "Item": {
+     "pk": {
+      "S": "a"
+     }
+    }
+   },
+   "Catch": [
+    {
+     "ErrorEquals": [
+      "DynamoDB.ConditionalCheckFailedException"
+     ],
+     "Next": "F"
+    }
+   ],
+   "Next": "F"
+  },
+  "F": {
+   "Type": "Fail"
+  }
+ }
+}
