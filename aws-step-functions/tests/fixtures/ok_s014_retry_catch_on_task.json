@@ -1,0 +1,29 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:listBuckets",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ]
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "B"
+        }
+      ],
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Succeed"
+    }
+  }
+}

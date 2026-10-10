@@ -3,4 +3,7 @@
   ["WARNING", "J013", "/States/A/Output/a"],
   ["WARNING", "J013", "/States/A/Output/b"],
   ["WARNING", "J013", "/States/A/Output/d"]
-]}
+], "contains": {
+  "J013@/States/A/Output/a": "did you mean $states.context.Execution.Id?",
+  "J013@/States/A/Output/b": "did you mean $states.context.Execution?"
+}}

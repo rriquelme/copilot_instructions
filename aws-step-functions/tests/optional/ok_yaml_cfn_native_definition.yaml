@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  OrdersMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      RoleArn: !GetAtt Role.Arn
+      Definition:
+        QueryLanguage: JSONata
+        StartAt: Load
+        States:
+          Load:
+            Type: Task
+            Resource: arn:aws:states:::dynamodb:getItem
+            Arguments:
+              TableName: !Ref OrdersTable
+              Key:
+                id:
+                  S: "{% $states.input.id %}"
+            Output: "{% $states.result.Item %}"
+            Next: Wait
+          Wait:
+            Type: Wait
+            Timestamp: 2025-01-31T10:00:00Z
+            Next: Notify
+          Notify:
+            Type: Task
+            Resource: !Sub arn:${AWS::Partition}:states:::sns:publish
+            Arguments:
+              TopicArn: !Ref Topic
+              Message: "{% $string($states.input) %}"
+            End: true

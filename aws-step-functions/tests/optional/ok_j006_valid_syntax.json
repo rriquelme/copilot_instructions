@@ -1,0 +1,20 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Shape",
+  "States": {
+    "Shape": {
+      "Type": "Pass",
+      "Output": {
+        "arithmetic": "{% ($states.input.a + 1) * 2 %}",
+        "conditional": "{% $exists($states.input.b) ? $states.input.b : 'none' %}",
+        "lambda": "{% $map($states.input.items, function($v, $i) { $v.qty * $i }) %}",
+        "objectConstructor": "{% {'id': $states.input.id, 'tags': [$states.input.tag]} %}",
+        "filter": "{% $states.input.items[qty > 1].sku %}",
+        "regex": "{% $match($states.input.text, /[0-9]+/) %}",
+        "block": "{% ($x := $states.input.a; $y := $x * 2; $x + $y) %}",
+        "concat": "{% 'order ' & $string($states.input.id) %}"
+      },
+      "End": true
+    }
+  }
+}

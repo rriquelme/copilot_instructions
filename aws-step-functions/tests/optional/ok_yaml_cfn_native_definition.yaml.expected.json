@@ -1,0 +1,3 @@
+{"requires": ["yaml"], "type": "STANDARD", "diagnostics": [
+  ["INFO", "S000", "/"]
+]}

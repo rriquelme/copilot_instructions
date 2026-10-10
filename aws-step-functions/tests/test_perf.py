@@ -70,6 +70,32 @@ INPUT_CASES = [
         "Type": "Task", "Resource": "{{" * 50000 + "}x", "End": True}}}), None, _expect_count(1)),
 ]
 
+# Terraform jsonencode({...}) HCL conversion and the PyYAML path (the YAML cases run the fallback when PyYAML is absent)
+_TF_STATE = '  S{i} = {{ Type = "Pass", Next = "S{j}" }}\n'
+INPUT_CASES += [
+    ("hcl jsonencode({ x 30000", lambda: "jsonencode({" * 30000, "main.tf", _expect_count(0)),
+    ("hcl jsonencode( in 30000 strings", lambda: "jsonencode({ a = \"" + 'jsonencode({ a = \\"x' * 30000 + '\nStartAt States',
+     "main.tf", _max_diags(25)),
+    ("hcl nested objects x 100000", lambda: "jsonencode({StartAt=1, States=" + "{a=" * 100000 + "1" + "}" * 100000 + "})",
+     "main.tf", _expect_count(0)),
+    ("hcl nested parens in a reference x 100000", lambda: "jsonencode({StartAt=1, States=f" + "(" * 100000 + ")" * 100000 + "})",
+     "main.tf", _expect_count(0)),
+    ("hcl 20000 unterminated heredocs", lambda: "jsonencode({StartAt=\"A\", States={\n" + "a = <<EOT\n" * 20000, "main.tf",
+     _max_diags(25)),
+    ("hcl 5000 jsonencode definitions", lambda: 'definition = jsonencode({ StartAt = "A", States = { A = { Type = "Succeed" } } })\n' * 5000,
+     "main.tf", _expect_count(5000)),
+    ("hcl 20000-state definition", lambda: "definition = jsonencode({\nStartAt = \"S0\"\nStates = {\n"
+     + "".join(_TF_STATE.format(i=i, j=i + 1) for i in range(20000)) + '  S20000 = { Type = "Succeed" }\n}\n})\n',
+     "main.tf", _expect_count(1)),
+    ("yaml 20000-state definition", lambda: "Resources:\n  SM:\n    Properties:\n      Definition:\n        StartAt: S0\n        States:\n"
+     + "".join(f"          S{i}: {{Type: Pass, Next: S{i + 1}}}\n" for i in range(20000)) + "          S20000: {Type: Succeed}\n",
+     "t.yaml", None),
+    ("yaml billion laughs", lambda: "a: &a [x, x, x, x, x, x, x, x, x]\n" + "".join(
+        f"{chr(98 + i)}: &{chr(98 + i)} [*{chr(97 + i)}, *{chr(97 + i)}, *{chr(97 + i)}, *{chr(97 + i)}, *{chr(97 + i)}, "
+        f"*{chr(97 + i)}, *{chr(97 + i)}, *{chr(97 + i)}, *{chr(97 + i)}]\n" for i in range(20)) + "Resources: {}\nStartAt: States\n",
+     "t.yaml", None),
+]
+
 
 def jsonata_def(states: dict, start: str) -> str:
     return json.dumps({"StartAt": start, "States": states, "QueryLanguage": "JSONata"})

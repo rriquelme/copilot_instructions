@@ -1,0 +1,26 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Loop",
+  "States": {
+    "Loop": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ItemProcessor": {
+        "StartAt": "Inner",
+        "States": {
+          "Inner": {
+            "Type": "Pass",
+            "Next": "Inner done"
+          },
+          "Inner done": {
+            "Type": "Succeed"
+          }
+        }
+      },
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}

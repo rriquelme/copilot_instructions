@@ -1,0 +1,20 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Call",
+  "States": {
+    "Call": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:listBuckets",
+      "Arguments": {
+        "Bucket": "{% $states.input.bucket %}",
+        "Nested": {
+          "Key": "{% $states.input.key %}"
+        }
+      },
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "StartAt": "Fail",
+  "States": {
+    "Fail": {
+      "Type": "Fail",
+      "Error": "E",
+      "ErrorPath": "$.error",
+      "Cause": 42
+    }
+  }
+}

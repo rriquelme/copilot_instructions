@@ -1,0 +1,9 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Frist",
+  "States": {
+    "First": {
+      "Type": "Succeed"
+    }
+  }
+}

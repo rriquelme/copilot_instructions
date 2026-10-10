@@ -1,0 +1,23 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Comment": "c",
+      "Assign": {
+        "x": 1
+      },
+      "Next": "C"
+    },
+    "C": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:listBuckets",
+      "Arguments": "{% {'Bucket': $x} %}",
+      "Next": "D"
+    },
+    "D": {
+      "Type": "Succeed"
+    }
+  }
+}

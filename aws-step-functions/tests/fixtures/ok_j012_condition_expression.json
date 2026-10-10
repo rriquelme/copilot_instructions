@@ -1,0 +1,27 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Route",
+  "States": {
+    "Route": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% $states.input.ok = true %}",
+          "Next": "Yes"
+        },
+        {
+          "Condition": "{% true %}",
+          "Next": "Yes"
+        }
+      ],
+      "Default": "No"
+    },
+    "Yes": {
+      "Type": "Succeed"
+    },
+    "No": {
+      "Type": "Fail",
+      "Error": "No"
+    }
+  }
+}

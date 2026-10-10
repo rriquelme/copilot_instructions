@@ -1144,6 +1144,11 @@ def _extract_definitions(text: str, filename: Optional[str], problems: list) -> 
             return []
         if directives:
             note = f"{note}; Terraform %{{ }} directives: only the first (if) branch of each %{{ if }} was linted"
+    yaml_error = None
+    if err is not None and not jsonish and yaml_candidate(text, filename):
+        loaded, yaml_error = load_yaml_template(text)
+        if loaded is not None:  # parsed with PyYAML: handled exactly like a JSON template from here on
+            direct, err, note = loaded, None, YAML_NOTE
     if err is None:
         if isinstance(direct, dict) and ("States" in direct or "StartAt" in direct):
             return [(direct, note, "/")]
@@ -1158,7 +1163,7 @@ def _extract_definitions(text: str, filename: Optional[str], problems: list) -> 
                 problems.append("this template has no inline state machine definition: it is in another file ("
                                 + "; ".join(elsewhere) + "); lint that file instead: python3 lint_asl.py <file>")
             else:
-                problems.append("this JSON template contains no state machine definition (no object with \"StartAt\" and \"States\", "
+                problems.append(f"this {'YAML' if note == YAML_NOTE else 'JSON'} template contains no state machine definition (no object with \"StartAt\" and \"States\", "
                                 "and no DefinitionString containing one)")
             return []
         elsewhere = definitions_elsewhere(direct) if nested else []
@@ -1172,7 +1177,416 @@ def _extract_definitions(text: str, filename: Optional[str], problems: list) -> 
         return []
     found, embedded_problems = extract_embedded(text)
     problems.extend(embedded_problems)
+    if "jsonencode" in text:
+        found.extend(extract_jsonencode(text, problems, bool(found or embedded_problems), {lb for _d, _n, lb in found}))
+    if yaml_error and not found and not embedded_problems:
+        problems.append(f"invalid YAML: {yaml_error}; nothing was linted - fix the YAML syntax and re-run")
     return found
+
+
+# ---------------------------------------------------------------------------
+# Terraform jsonencode({...}) and CloudFormation/SAM YAML-native definitions
+# ---------------------------------------------------------------------------
+# jsonencode turns an HCL object into JSON (objects, lists, strings, numbers, bools, null map 1:1):
+# https://developer.hashicorp.com/terraform/language/functions/jsonencode
+# CloudFormation Definition "must be in JSON or YAML, and the format of the object must match the format of your
+# template": https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-stepfunctions-statemachine.html
+
+JSONENCODE_RE = re.compile(r"\bjsonencode\s*\(")
+HCL_IDENT_RE = re.compile(r"[^\W\d][\w-]*")
+HCL_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
+HCL_STARTAT_RE = re.compile(r"\bStartAt\b")
+HCL_STATES_RE = re.compile(r"\bStates\b")
+HCL_MAX_DEPTH = 150  # nesting levels converted; deeper is reported as not convertible (keeps recursion bounded)
+HCL_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}
+
+
+class HclError(Exception):
+    """The HCL is outside the converted subset (for expressions, template directives, ...) or malformed; .pos is the
+    offset in the text (the line number is computed only for reported failures, keeping many failures linear)."""
+
+    def __init__(self, what: str, pos: int) -> None:
+        super().__init__(what)
+        self.pos = pos
+
+
+class HclObjectReader:
+    """Reads one HCL value (the argument of jsonencode) as the JSON value jsonencode would produce. Supported: objects
+    ({ key = value } / { key: value }, quoted or bare keys, newline or comma separated), lists (trailing comma ok),
+    quoted strings and heredocs, numbers, true/false/null, # // /* */ comments. Every other expression (references
+    such as aws_lambda_function.f.arn, function calls, conditionals) and every ${...} interpolation becomes the
+    placeholder "__TPL__", as in extract_embedded. for expressions and %{ } directives raise HclError."""
+
+    def __init__(self, text: str, pos: int) -> None:
+        self.t, self.i, self.n, self.depth = text, pos, len(text), 0
+
+    def fail(self, what: str) -> None:
+        raise HclError(what, min(self.i, self.n))
+
+    def skip(self, newlines: bool) -> None:
+        t, n = self.t, self.n
+        while self.i < n:
+            c = t[self.i]
+            if c in " \t\r" or (newlines and c == "\n"):
+                self.i += 1
+            elif c == "#" or t.startswith("//", self.i):
+                end = t.find("\n", self.i)
+                self.i = n if end < 0 else end
+            elif t.startswith("/*", self.i):
+                end = t.find("*/", self.i + 2)
+                if end < 0:
+                    self.fail("unclosed /* comment")
+                self.i = end + 2
+            else:
+                return
+
+    def at_end_of_item(self) -> bool:
+        """After a value: only a separator, a closing bracket or a comment may follow on the same line."""
+        self.skip(False)
+        return self.i >= self.n or self.t[self.i] in ",\n}])" or self.t[self.i] == "#" or self.t.startswith(("//", "/*"), self.i)
+
+    def value(self) -> Any:
+        self.depth += 1
+        if self.depth > HCL_MAX_DEPTH:
+            self.fail(f"values nested deeper than {HCL_MAX_DEPTH} levels")
+        start = self.i
+        c = self.t[self.i] if self.i < self.n else ""
+        m = HCL_IDENT_RE.match(self.t, self.i) if c and not c.isdigit() else None
+        if c == "{":
+            v: Any = self.obj()
+        elif c == "[":
+            v = self.lst()
+        elif c == '"':
+            v = self.string()
+        elif self.t.startswith("<<", self.i):
+            v = self.heredoc()
+        elif HCL_NUMBER_RE.match(self.t, self.i):
+            v = self.number()
+        elif m and m.group() in ("true", "false", "null"):
+            self.i = m.end()
+            v = {"true": True, "false": False, "null": None}[m.group()]
+        elif m or (c and c in "(-!"):  # reference, call, (expr), -x, !x
+            v = self.expression()
+        else:
+            self.fail(f"unexpected {json.dumps(c) if c else 'end of file'}")
+        if not self.at_end_of_item():  # "a" == var.x ? ... / 1 + var.n: the literal starts a larger expression
+            self.i = start
+            v = self.expression()
+        self.depth -= 1
+        return v
+
+    def obj(self) -> dict:
+        self.i += 1
+        out: dict = {}
+        while True:
+            self.skip(True)
+            if self.i >= self.n:
+                self.fail("unclosed {")
+            c = self.t[self.i]
+            if c == "}":
+                self.i += 1
+                return out
+            m = HCL_IDENT_RE.match(self.t, self.i)
+            if c == '"':
+                key = self.string()
+            elif c == "(":  # computed key (var.name) = ...
+                key = self.expression()
+            elif m:
+                if m.group() == "for" and self.t[m.end():m.end() + 1].isspace():
+                    self.fail("for expression")
+                key = m.group()
+                self.i = m.end()
+            else:
+                self.fail(f"unexpected {json.dumps(c)} where an object key was expected")
+            self.skip(False)
+            if self.t.startswith(("==", "=>"), self.i) or self.i >= self.n or self.t[self.i] not in "=:":
+                self.fail(f'expected "=" after the key {json.dumps(key)}')
+            self.i += 1
+            self.skip(False)
+            out[key] = self.value()
+            self.skip(False)
+            if self.i < self.n and self.t[self.i] == ",":
+                self.i += 1
+
+    def lst(self) -> list:
+        self.i += 1
+        out: list = []
+        self.skip(True)
+        m = HCL_IDENT_RE.match(self.t, self.i)
+        if m and m.group() == "for" and self.t[m.end():m.end() + 1].isspace():
+            self.fail("for expression")
+        while True:
+            self.skip(True)
+            if self.i >= self.n:
+                self.fail("unclosed [")
+            if self.t[self.i] == "]":
+                self.i += 1
+                return out
+            out.append(self.value())
+            self.skip(True)
+            if self.i < self.n and self.t[self.i] == ",":
+                self.i += 1
+            elif self.i < self.n and self.t[self.i] != "]":
+                self.fail('expected "," or "]" in a list')
+
+    def interpolation(self, out: list) -> bool:
+        """Handle $${ / %%{ escapes and ${...} at self.i; True when something was consumed."""
+        t, i = self.t, self.i
+        if t.startswith(("$${", "%%{"), i):
+            out.append(t[i + 1:i + 3])
+            self.i += 3
+            return True
+        if t.startswith("${", i):
+            end = placeholder_end(t, i)
+            if end < 0:
+                self.fail("unclosed ${")
+            out.append("__TPL__")
+            self.i = end
+            return True
+        if t.startswith("%{", i):
+            self.fail("template directive %{ }")
+        return False
+
+    def string(self) -> str:
+        self.i += 1
+        out: list[str] = []
+        t, n = self.t, self.n
+        while self.i < n:
+            c = t[self.i]
+            if c == '"':
+                self.i += 1
+                return "".join(out)
+            if c == "\n":
+                break
+            if c == "\\":
+                e = t[self.i + 1:self.i + 2]
+                if e in HCL_ESCAPES:
+                    out.append(HCL_ESCAPES[e])
+                    self.i += 2
+                elif e in ("u", "U"):
+                    width = 4 if e == "u" else 8
+                    digits = t[self.i + 2:self.i + 2 + width]
+                    if len(digits) != width or not all(ch in "0123456789abcdefABCDEF" for ch in digits) or int(digits, 16) > 0x10FFFF:
+                        self.fail("invalid \\u escape")
+                    out.append(chr(int(digits, 16)))
+                    self.i += 2 + width
+                else:
+                    self.fail(f"invalid escape \\{e}")
+                continue
+            if c in "$%" and self.interpolation(out):
+                continue
+            out.append(c)
+            self.i += 1
+        self.fail("unclosed string")
+        return ""
+
+    def heredoc(self) -> str:
+        m = re.compile(r"<<(-?)([^\W\d][\w-]*)[ \t]*\r?\n").match(self.t, self.i)
+        if not m:
+            self.fail("malformed heredoc")
+        body_start = m.end()
+        end = re.compile(r"^[ \t]*" + re.escape(m.group(2)) + r"[ \t]*\r?$", re.M).search(self.t, body_start)
+        if not end:
+            self.fail(f"heredoc without its closing {m.group(2)}")
+        lines = self.t[body_start:end.start()].split("\n")[:-1] if end.start() > body_start else []
+        if m.group(1):  # <<-: strip the common leading whitespace
+            indents = [len(ln) - len(ln.lstrip(" \t")) for ln in lines if ln.strip()]
+            cut = min(indents, default=0)
+            lines = [ln[cut:] for ln in lines]
+        body = "\n".join(lines) + ("\n" if lines else "")
+        self.i = end.end()
+        sub = HclObjectReader(body, 0)
+        out: list[str] = []
+        try:
+            while sub.i < sub.n:
+                if body[sub.i] in "$%" and sub.interpolation(out):
+                    continue
+                out.append(body[sub.i])
+                sub.i += 1
+        except HclError as ex:
+            raise HclError(str(ex), body_start) from None
+        return "".join(out)
+
+    def number(self) -> Any:
+        m = HCL_NUMBER_RE.match(self.t, self.i)
+        self.i = m.end()  # type: ignore[union-attr]
+        s = m.group()  # type: ignore[union-attr]
+        if not any(ch in s for ch in ".eE"):
+            return _parse_big_int(s)
+        f = float(s)
+        return int(f) if f.is_integer() and abs(f) < 2 ** 53 else f  # jsonencode(2.0) is 2
+
+    def expression(self) -> str:
+        """Skip one expression (reference, call, conditional, ...) up to the end of the item; it becomes "__TPL__"."""
+        t, n = self.t, self.n
+        stack: list[str] = []
+        while self.i < n:
+            c = t[self.i]
+            if c == '"':
+                self.string()
+                continue
+            if t.startswith("<<", self.i) and HCL_IDENT_RE.match(t, self.i + 2 + (t[self.i + 2:self.i + 3] == "-")):
+                self.heredoc()
+                continue
+            if not stack and (c in ",\n" or c in "}])" or c == "#" or t.startswith(("//", "/*"), self.i)):
+                break
+            if c in "([{":
+                if c in "[{":
+                    self.i += 1
+                    self.skip(True)
+                    m = HCL_IDENT_RE.match(t, self.i)
+                    if m and m.group() == "for" and t[m.end():m.end() + 1].isspace():
+                        self.fail("for expression")
+                    stack.append({"(": ")", "[": "]", "{": "}"}[c])
+                    if len(stack) > HCL_MAX_DEPTH:
+                        self.fail(f"expression nested deeper than {HCL_MAX_DEPTH} levels")
+                    continue
+                stack.append(")")
+                if len(stack) > HCL_MAX_DEPTH:
+                    self.fail(f"expression nested deeper than {HCL_MAX_DEPTH} levels")
+            elif c in ")]}":
+                if not stack or stack.pop() != c:
+                    self.fail(f"unbalanced {c}")
+            elif t.startswith("/*", self.i) or c == "#" or t.startswith("//", self.i):
+                self.skip(False)
+                continue
+            self.i += 1
+        if stack:
+            self.fail("unclosed bracket in an expression")
+        return "__TPL__"
+
+
+def extract_jsonencode(text: str, problems: list, others: bool, taken: set) -> list[tuple[dict, Optional[str], str]]:
+    """State machine definitions written as Terraform jsonencode({...}) (HCL, not JSON), converted with HclObjectReader.
+    A jsonencode that mentions StartAt and States but cannot be converted is reported: as the error that nothing could
+    be linted (with the usual render-it-first advice) when nothing else in the file was linted, else as INFO.
+    Linear: a failed conversion's scanned text is never rescanned by a later jsonencode( inside it."""
+    found: list[tuple[dict, Optional[str], str]] = []
+    failures: list[tuple[int, str, int]] = []
+    resource_at = None
+    newlines: list[int] = []
+    scanned = 0
+    m = JSONENCODE_RE.search(text)
+    while m:
+        reader = HclObjectReader(text, m.end())
+        nxt = JSONENCODE_RE.search(text, m.end())
+        try:
+            reader.skip(True)
+            if reader.i < reader.n and text[reader.i] == "{":
+                obj = reader.value()
+                reader.skip(True)
+                if reader.i >= reader.n or text[reader.i] != ")":
+                    reader.fail('expected ")" closing jsonencode(')
+                if is_definition(obj):
+                    newlines = newlines or [k.start() for k in re.finditer("\n", text)]
+                    line = bisect.bisect_left(newlines, m.start()) + 1
+                    resource_at = resource_at or terraform_resources(text)
+                    resource = resource_at(line)
+                    label = f"line {line}" + (f" {resource}" if resource else "")
+                    if label not in taken:
+                        found.append((obj, f"converted the Terraform jsonencode({{...}}) at line {line} from HCL to JSON "
+                                      "(references and ${...} interpolations replaced by __TPL__)", label))
+        except (HclError, RecursionError) as ex:
+            end = nxt.start() if nxt else len(text)
+            if HCL_STARTAT_RE.search(text, m.end(), end) and HCL_STATES_RE.search(text, m.end(), end):
+                failures.append((m.start(), str(ex) if isinstance(ex, HclError) else "nested too deeply",
+                                 ex.pos if isinstance(ex, HclError) else reader.i))
+        scanned = max(scanned, reader.i)
+        while nxt and nxt.start() < scanned:
+            nxt = JSONENCODE_RE.search(text, nxt.end())
+        m = nxt
+    if failures:
+        newlines = newlines or [k.start() for k in re.finditer("\n", text)]
+    for start, what, pos in failures[:MAX_EMBEDDED_PROBLEMS]:
+        line = bisect.bisect_left(newlines, start) + 1
+        why = f"{what} at line {bisect.bisect_left(newlines, pos) + 1}"
+        if others or found:
+            problems.append(("INFO", f"not linted: the Terraform jsonencode({{...}}) at line {line} uses HCL this linter "
+                             f"cannot convert ({why}); render it to JSON to lint it (terraform show -json, or terraform console)"))
+        else:
+            problems.append(f"the Terraform jsonencode({{...}}) at line {line} uses HCL this linter cannot convert ({why}). "
+                            + TERRAFORM_HCL_HINT)
+    return found
+
+
+YAML_NOTE = "parsed the YAML template with PyYAML (CloudFormation tags such as !Ref and !GetAtt replaced by __TPL__)"
+YAML_TEMPLATE_RE = re.compile(r"^(?:AWSTemplateFormatVersion|Resources|Transform|stepFunctions)[^\S\n]*:|"
+                              r"^[^\S\n]*(?:definition|definitionbody)[^\S\n]*:[^\S\n]*(?:#.*)?$", re.M | re.I)
+YAML_MAX_ALIASES = 100  # *alias references allowed: more could expand exponentially ("billion laughs")
+YAML_ALIAS_RE = re.compile(r"(?:^|[\s\[{,:-])\*[^\s,\[\]{}]")
+_yaml_loader_cache: dict = {}
+
+
+def load_yaml():
+    """The PyYAML module, or None when it is not installed (it is optional: pip install pyyaml)."""
+    try:
+        import yaml  # type: ignore
+
+        return yaml
+    except Exception:  # noqa: BLE001 - any import problem means "not available"
+        return None
+
+
+def yaml_candidate(text: str, filename: Optional[str]) -> bool:
+    return (filename or "").lower().endswith((".yaml", ".yml", ".template")) or YAML_TEMPLATE_RE.search(text) is not None
+
+
+def _yaml_loader(yaml):
+    """A safe loader (libyaml's CSafeLoader when PyYAML was built with it: much faster) that reads CloudFormation
+    short-form tags as their JSON form (!Ref x -> {"Ref": x}, !Sub s -> {"Fn::Sub": s}, !GetAtt a.b ->
+    {"Fn::GetAtt": [a, b]}, ...) and keeps timestamps as strings (as CloudFormation does)."""
+    if _yaml_loader_cache.get("module") is yaml:
+        return _yaml_loader_cache["loader"]
+
+    class CfnLoader(getattr(yaml, "CSafeLoader", yaml.SafeLoader)):  # type: ignore[misc]
+        pass
+
+    def cfn_tag(loader, suffix, node):  # noqa: ANN001
+        if isinstance(node, yaml.ScalarNode):
+            v = loader.construct_scalar(node)
+        elif isinstance(node, yaml.SequenceNode):
+            v = loader.construct_sequence(node, deep=True)
+        else:
+            v = loader.construct_mapping(node, deep=True)
+        if suffix == "Ref":
+            return {"Ref": v}
+        if suffix == "GetAtt" and isinstance(v, str):
+            v = v.split(".", 1)
+        return {f"Fn::{suffix}": v}
+
+    CfnLoader.add_multi_constructor("!", cfn_tag)
+    CfnLoader.yaml_implicit_resolvers = {
+        k: [(tag, rx) for tag, rx in v if tag != "tag:yaml.org,2002:timestamp"]
+        for k, v in yaml.SafeLoader.yaml_implicit_resolvers.items()}
+    _yaml_loader_cache.update(module=yaml, loader=CfnLoader)
+    return CfnLoader
+
+
+def load_yaml_template(text: str) -> tuple[Any, Optional[str]]:
+    """(document, None) for a YAML mapping that holds (or, as a CloudFormation template, may hold) a state machine
+    definition, normalised to plain JSON types; (None, reason) when PyYAML is missing, the YAML is invalid, or the
+    document is something else (then the caller falls back to extracting embedded JSON)."""
+    yaml = load_yaml()
+    if yaml is None:
+        return None, None
+    aliases = 0
+    for _alias in YAML_ALIAS_RE.finditer(text):  # counted before parsing: expanding many aliases can blow up
+        aliases += 1
+        if aliases > YAML_MAX_ALIASES:
+            return None, f"more than {YAML_MAX_ALIASES} *alias references; not parsed"
+    try:
+        doc = yaml.load(text, Loader=_yaml_loader(yaml))  # a SafeLoader subclass: no arbitrary objects
+        doc = json.loads(json.dumps(doc, default=str))  # dates, sets, non-string keys -> JSON types
+    except yaml.YAMLError as ex:
+        return None, " ".join(str(ex).split())[:300]
+    except (ValueError, TypeError, RecursionError) as ex:
+        return None, f"{type(ex).__name__}: {ex}"[:300]
+    if not isinstance(doc, dict):
+        return None, None
+    if "Resources" in doc or "AWSTemplateFormatVersion" in doc:
+        return doc, None
+    dumped = json.dumps(doc)
+    return (doc, None) if "StartAt" in dumped and "States" in dumped else (None, None)
 
 
 # ---------------------------------------------------------------------------

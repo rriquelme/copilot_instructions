@@ -1,0 +1,27 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Route",
+  "States": {
+    "Route": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% true %}",
+          "Next": "Step"
+        }
+      ],
+      "Default": "Done"
+    },
+    "Step": {
+      "Type": "Pass",
+      "Next": "Last"
+    },
+    "Last": {
+      "Type": "Pass",
+      "End": true
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S006", "/States/Empty/Choices"],
+  ["ERROR", "S006", "/States/Rules/Choices/0"],
+  ["ERROR", "S006", "/States/Rules/Choices/1"],
+  ["ERROR", "S006", "/States/Rules/Choices/2"],
+  ["ERROR", "S006", "/States/Rules/Choices/3/Varible"],
+  ["WARNING", "S006", "/States/Rules"]
+]}

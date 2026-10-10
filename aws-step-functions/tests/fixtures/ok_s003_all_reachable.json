@@ -1,0 +1,23 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% $states.input.b %}",
+          "Next": "B"
+        }
+      ],
+      "Default": "C"
+    },
+    "B": {
+      "Type": "Pass",
+      "Next": "C"
+    },
+    "C": {
+      "Type": "Succeed"
+    }
+  }
+}

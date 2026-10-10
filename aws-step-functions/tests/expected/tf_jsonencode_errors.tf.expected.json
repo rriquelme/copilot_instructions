@@ -1,0 +1,11 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J003", "[2:line 21 aws_sfn_state_machine.b] /States/Wait/Seconds"],
+  ["ERROR", "S002", "[2:line 21 aws_sfn_state_machine.b] /States/Wait/Next"],
+  ["ERROR", "S003", "[1:line 3 aws_sfn_state_machine.a] /States/Done"],
+  ["ERROR", "S009", "[1:line 3 aws_sfn_state_machine.a] /States/Load/Nxt"],
+  ["ERROR", "S010", "[2:line 21 aws_sfn_state_machine.b] /States/Wait/Seconds"],
+  ["INFO", "S000", "[1:line 3 aws_sfn_state_machine.a] /"],
+  ["INFO", "S000", "[2:line 21 aws_sfn_state_machine.b] /"]
+], "contains": {
+  "S009@[1:line 3 aws_sfn_state_machine.a] /States/Load/Nxt": "did you mean \"Next\"?"
+}}

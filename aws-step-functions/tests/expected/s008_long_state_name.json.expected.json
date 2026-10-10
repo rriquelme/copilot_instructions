@@ -1,0 +1,3 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S008", "/States/Validate the incoming order payload and make sure every line item has a SKU and qty"]
+]}

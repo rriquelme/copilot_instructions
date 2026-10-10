@@ -1,0 +1,36 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Init",
+  "States": {
+    "Init": {
+      "Type": "Pass",
+      "Assign": {
+        "orderId": "{% $states.input.id %}"
+      },
+      "Next": "Fan out"
+    },
+    "Fan out": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ItemSelector": {
+        "orderId": "{% $orderId %}",
+        "item": "{% $states.context.Map.Item.Value %}"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "STANDARD"
+        },
+        "StartAt": "Work",
+        "States": {
+          "Work": {
+            "Type": "Pass",
+            "Output": "{% $states.input.orderId %}",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

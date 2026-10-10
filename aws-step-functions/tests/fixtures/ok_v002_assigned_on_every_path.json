@@ -1,0 +1,49 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Init",
+  "States": {
+    "Init": {
+      "Type": "Pass",
+      "Assign": {
+        "tier": "standard"
+      },
+      "Next": "Route"
+    },
+    "Route": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% $states.input.vip %}",
+          "Assign": {
+            "tier": "gold"
+          },
+          "Next": "Use"
+        }
+      ],
+      "Default": "Use"
+    },
+    "Use": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "Output": "{% $tier %}",
+      "ItemProcessor": {
+        "StartAt": "Inner",
+        "States": {
+          "Inner": {
+            "Type": "Pass",
+            "Assign": {
+              "inner": 1
+            },
+            "Next": "Read"
+          },
+          "Read": {
+            "Type": "Pass",
+            "Output": "{% $inner %}",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Shape",
+  "States": {
+    "Shape": {
+      "Type": "Pass",
+      "Output": {
+        "n": "{% $toNumber($states.input.n) %}",
+        "s": "{% $foo($states.input) %}"
+      },
+      "End": true
+    }
+  }
+}

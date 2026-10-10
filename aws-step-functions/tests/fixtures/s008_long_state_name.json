@@ -1,0 +1,9 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Validate the incoming order payload and make sure every line item has a SKU and qty",
+  "States": {
+    "Validate the incoming order payload and make sure every line item has a SKU and qty": {
+      "Type": "Succeed"
+    }
+  }
+}

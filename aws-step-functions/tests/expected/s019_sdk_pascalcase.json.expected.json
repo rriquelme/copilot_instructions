@@ -1,3 +1,5 @@
 {"type": "STANDARD", "diagnostics": [
   ["ERROR", "S019", "/States/Get/Resource"]
-]}
+], "contains": {
+  "S019@/States/Get/Resource": "\"arn:aws:states:::aws-sdk:s3:getObject\""
+}}
