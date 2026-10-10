@@ -1,0 +1,80 @@
+{
+  "Comment": "One supported action of many optimized integrations, plus aws-sdk calls with the right service names",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Integrations",
+  "States": {
+    "Integrations": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "Comment": "DynamoDB, SQS, SNS, EventBridge",
+          "StartAt": "Get",
+          "States": {
+            "Get": {"Type": "Task", "Resource": "arn:aws:states:::dynamodb:getItem",
+                    "Arguments": {"TableName": "t", "Key": {"pk": {"S": "{% $states.input.id %}"}}}, "Next": "Update"},
+            "Update": {"Type": "Task", "Resource": "arn:aws:states:::dynamodb:updateItem",
+                       "Arguments": {"TableName": "t", "Key": {"pk": {"S": "{% $states.input.id %}"}}, "UpdateExpression": "SET #s = :s",
+                                     "ExpressionAttributeNames": {"#s": "status"}, "ExpressionAttributeValues": {":s": {"S": "DONE"}}}, "Next": "Delete"},
+            "Delete": {"Type": "Task", "Resource": "arn:aws:states:::dynamodb:deleteItem",
+                       "Arguments": {"TableName": "t", "Key": {"pk": {"S": "{% $states.input.id %}"}}}, "Next": "Send"},
+            "Send": {"Type": "Task", "Resource": "arn:aws:states:::sqs:sendMessage",
+                     "Arguments": {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q", "MessageBody": "{% $states.input %}"}, "Next": "Notify"},
+            "Notify": {"Type": "Task", "Resource": "arn:aws:states:::sns:publish",
+                       "Arguments": {"TopicArn": "arn:aws:sns:us-east-1:123456789012:t", "Message": "done"}, "Next": "Emit"},
+            "Emit": {"Type": "Task", "Resource": "arn:aws:states:::events:putEvents",
+                     "Arguments": {"Entries": [{"Source": "orders", "DetailType": "Done", "Detail": {"id": "{% $states.input.id %}"}}]}, "End": true}
+          }
+        },
+        {
+          "StartAt": "Child",
+          "States": {
+            "Child": {"Type": "Task", "Resource": "arn:aws:states:::states:startExecution.sync:2",
+                      "Arguments": {"StateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:child", "Input": {"id": "{% $states.input.id %}"}},
+                      "Next": "Container"},
+            "Container": {"Type": "Task", "Resource": "arn:aws:states:::ecs:runTask.sync",
+                          "Arguments": {"Cluster": "c", "TaskDefinition": "td", "LaunchType": "FARGATE"}, "Next": "BatchJob"},
+            "BatchJob": {"Type": "Task", "Resource": "arn:aws:states:::batch:submitJob.sync",
+                         "Arguments": {"JobName": "j", "JobQueue": "q", "JobDefinition": "d"}, "Next": "Etl"},
+            "Etl": {"Type": "Task", "Resource": "arn:aws:states:::glue:startJobRun.sync", "Arguments": {"JobName": "etl"}, "Next": "Query"},
+            "Query": {"Type": "Task", "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+                      "Arguments": {"QueryString": "SELECT 1", "WorkGroup": "primary"}, "Next": "Build"},
+            "Build": {"Type": "Task", "Resource": "arn:aws:states:::codebuild:startBuild.sync", "Arguments": {"ProjectName": "p"}, "Next": "Train"},
+            "Train": {"Type": "Task", "Resource": "arn:aws:states:::sagemaker:createTrainingJob.sync",
+                      "Arguments": {"TrainingJobName": "{% $states.context.Execution.Name %}", "AlgorithmSpecification": {"TrainingImage": "img", "TrainingInputMode": "File"},
+                                    "RoleArn": "arn:aws:iam::123456789012:role/sm", "OutputDataConfig": {"S3OutputPath": "s3://b/out"},
+                                    "ResourceConfig": {"InstanceCount": 1, "InstanceType": "ml.m5.large", "VolumeSizeInGB": 10},
+                                    "StoppingCondition": {"MaxRuntimeInSeconds": 3600}}, "Next": "Cluster"},
+            "Cluster": {"Type": "Task", "Resource": "arn:aws:states:::elasticmapreduce:addStep.sync",
+                        "Arguments": {"ClusterId": "j-1", "Step": {"Name": "s", "HadoopJarStep": {"Jar": "command-runner.jar", "Args": ["true"]}}}, "End": true}
+          }
+        },
+        {
+          "StartAt": "Api",
+          "States": {
+            "Api": {"Type": "Task", "Resource": "arn:aws:states:::apigateway:invoke",
+                    "Arguments": {"ApiEndpoint": "example.execute-api.us-east-1.amazonaws.com", "Method": "GET", "Stage": "prod", "Path": "/orders"}, "Next": "Http"},
+            "Http": {"Type": "Task", "Resource": "arn:aws:states:::http:invoke",
+                     "Arguments": {"ApiEndpoint": "https://api.example.com/orders", "Method": "GET",
+                                   "Authentication": {"ConnectionArn": "arn:aws:events:us-east-1:123456789012:connection/c/1"}}, "Next": "Model"},
+            "Model": {"Type": "Task", "Resource": "arn:aws:states:::bedrock:invokeModel",
+                      "Arguments": {"ModelId": "anthropic.claude-3-haiku-20240307-v1:0", "Body": {"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100,
+                                    "messages": [{"role": "user", "content": "hi"}]}}, "Next": "Kube"},
+            "Kube": {"Type": "Task", "Resource": "arn:aws:states:::eks:call",
+                     "Arguments": {"ClusterName": "c", "CertificateAuthority": "ca", "Endpoint": "https://e", "Method": "GET", "Path": "/api/v1/pods"}, "Next": "SdkSfn"},
+            "SdkSfn": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:sfn:listExecutions",
+                       "Arguments": {"StateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:child"}, "Next": "SdkEvents"},
+            "SdkEvents": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:eventbridge:listRules", "Arguments": {}, "Next": "SdkQuery"},
+            "SdkQuery": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:dynamodb:query",
+                         "Arguments": {"TableName": "t", "KeyConditionExpression": "pk = :p", "ExpressionAttributeValues": {":p": {"S": "a"}}}, "Next": "SdkS3"},
+            "SdkS3": {"Type": "Task", "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+                      "Credentials": {"RoleArn": "arn:aws:iam::123456789012:role/reader"},
+                      "Arguments": {"Bucket": "b", "Key": "k"}, "Next": "Fn"},
+            "Fn": {"Type": "Task", "Resource": "arn:aws:lambda:us-east-1:123456789012:function:legacy",
+                   "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"], "MaxAttempts": 2}], "End": true}
+          }
+        }
+      ],
+      "End": true
+    }
+  }
+}

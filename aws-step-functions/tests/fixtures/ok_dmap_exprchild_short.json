@@ -1,0 +1,37 @@
+{
+  "Comment": "Standard parent, Distributed Map with EXPRESS children that only use request-response calls and short waits; a long Wait in the Standard parent is fine",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Cooldown",
+  "States": {
+    "Cooldown": {"Type": "Wait", "Seconds": 3600, "Next": "Thumbnails"},
+    "Thumbnails": {
+      "Type": "Map",
+      "Items": "{% $states.input.images %}",
+      "ItemSelector": {"key": "{% $states.context.Map.Item.Value %}", "bucket": "{% $states.input.bucket %}"},
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "EXPRESS"},
+        "StartAt": "Resize",
+        "States": {
+          "Resize": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Arguments": {"FunctionName": "arn:aws:lambda:us-east-1:123456789012:function:resize", "Payload": "{% $states.input %}"},
+            "Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"], "MaxAttempts": 2}],
+            "TimeoutSeconds": 240,
+            "Output": "{% $states.result.Payload %}",
+            "Next": "Settle"
+          },
+          "Settle": {"Type": "Wait", "Seconds": 5, "Next": "Record"},
+          "Record": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::dynamodb:putItem",
+            "Arguments": {"TableName": "thumbs", "Item": {"pk": {"S": "{% $states.input.key %}"}}},
+            "End": true
+          }
+        }
+      },
+      "MaxConcurrency": 1000,
+      "End": true
+    }
+  }
+}

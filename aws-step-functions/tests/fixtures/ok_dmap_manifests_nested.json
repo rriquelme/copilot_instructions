@@ -1,0 +1,63 @@
+{
+  "Comment": "S3 inventory and Athena manifests, GIVEN headers, Standard children with .sync and callbacks, a Distributed Map nested in a Standard child",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Inventory",
+  "States": {
+    "Inventory": {
+      "Type": "Map",
+      "Label": "Inventory",
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"ManifestType": "S3_INVENTORY"},
+        "Arguments": {"Bucket": "inventory-reports", "Key": "source/config/2026-10-01T00-00Z/manifest.json"}
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "Crawl",
+        "States": {
+          "Crawl": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+            "Arguments": {"JobName": "index-object", "Arguments": {"--key": "{% $states.input.Key %}"}},
+            "TimeoutSeconds": 7200,
+            "Next": "Approve"
+          },
+          "Approve": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+            "Arguments": {
+              "QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/approvals",
+              "MessageBody": {"key": "{% $states.input.Key %}", "token": "{% $states.context.Task.Token %}"}
+            },
+            "TimeoutSeconds": 86400,
+            "Next": "Rows"
+          },
+          "Rows": {
+            "Type": "Map",
+            "Label": "AthenaRows",
+            "ItemReader": {
+              "Resource": "arn:aws:states:::s3:getObject",
+              "ReaderConfig": {"ManifestType": "ATHENA_DATA", "InputType": "CSV", "CSVHeaderLocation": "GIVEN", "CSVHeaders": ["id", "amount", "ts"]},
+              "Arguments": {"Bucket": "athena-results", "Key": "unload/q-123-manifest.csv"}
+            },
+            "ItemProcessor": {
+              "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "EXPRESS"},
+              "StartAt": "Store",
+              "States": {
+                "Store": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::dynamodb:putItem",
+                  "Arguments": {"TableName": "rows", "Item": {"pk": {"S": "{% $states.input.id %}"}, "amount": {"N": "{% $states.input.amount %}"}}},
+                  "End": true
+                }
+              }
+            },
+            "ToleratedFailurePercentage": 2.5,
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "Comment": "JSONPath Distributed Map: listObjectsV2 + LOAD_AND_FLATTEN, *Path limits, cross-account Credentials, results preview only",
+  "StartAt": "ReadLogs",
+  "States": {
+    "ReadLogs": {
+      "Type": "Map",
+      "Label": "daily-log-audit_v2",
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:listObjectsV2",
+        "ReaderConfig": {"InputType": "JSONL", "Transformation": "LOAD_AND_FLATTEN", "MaxItemsPath": "$.limits.items"},
+        "Parameters": {"Bucket.$": "$.bucket", "Prefix": "logs/2026/"}
+      },
+      "ItemBatcher": {"MaxItemsPerBatchPath": "$.limits.batch", "MaxInputBytesPerBatch": 65536},
+      "MaxConcurrencyPath": "$.limits.concurrency",
+      "ToleratedFailurePercentagePath": "$.limits.failurePct",
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "Audit",
+        "States": {
+          "Audit": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:cloudwatchlogs:putLogEvents",
+            "Credentials": {"RoleArn.$": "States.Format('arn:aws:iam::{}:role/LogWriter', $.BatchInput.account)"},
+            "Parameters": {"LogGroupName": "audit", "LogStreamName": "daily", "LogEvents.$": "$.Items"},
+            "End": true
+          }
+        }
+      },
+      "ItemSelector": {"line.$": "$$.Map.Item.Value"},
+      "ResultWriter": {"WriterConfig": {"Transformation": "COMPACT", "OutputType": "JSON"}},
+      "ResultPath": "$.audit",
+      "End": true
+    }
+  }
+}
