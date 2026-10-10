@@ -739,15 +739,31 @@ def _parse_big_int(s: str) -> Any:
         return float(s)
 
 
+class DupKeyDict(dict):
+    """A parsed JSON object that had duplicate keys (S024): json keeps the last value silently; dup_keys lists them."""
+    dup_keys: list = []
+
+
+def _object_pairs(pairs: list) -> dict:
+    d = dict(pairs)
+    if len(d) == len(pairs):
+        return d
+    out = DupKeyDict(d)
+    seen: set = set()
+    out.dup_keys = list(dict.fromkeys(k for k, _v in pairs if k in seen or seen.add(k)))  # type: ignore[func-returns-value]
+    return out
+
+
 def json_loads(text: str, problems: Optional[list] = None) -> Any:
     """json.loads, but an integer longer than Python's int-digit limit (a plain ValueError, not JSONDecodeError) is
-    read as a float and BIG_INT_PROBLEM is added to `problems` instead of crashing. Raises JSONDecodeError as usual."""
+    read as a float and BIG_INT_PROBLEM is added to `problems` instead of crashing. Raises JSONDecodeError as usual.
+    Objects with duplicate keys come back as DupKeyDict (reported by S024)."""
     try:
-        return json.loads(text)
+        return json.loads(text, object_pairs_hook=_object_pairs)
     except json.JSONDecodeError:
         raise
     except ValueError:
-        obj = json.loads(text, parse_int=_parse_big_int)
+        obj = json.loads(text, parse_int=_parse_big_int, object_pairs_hook=_object_pairs)
         if problems is not None and BIG_INT_PROBLEM not in problems:
             problems.append(BIG_INT_PROBLEM)
         return obj
@@ -2983,11 +2999,518 @@ def check_express_mode(definition: dict, diags: Diagnostics) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Integrations, nested-object schemas and Distributed Map configuration (S023-S028)
+# ---------------------------------------------------------------------------
+
+# S023: the actions of each optimized integration, from its connect-*.html page; the list of services is
+# https://docs.aws.amazon.com/step-functions/latest/dg/integrate-optimized.html (http:invoke: call-https-apis.html).
+# Services not listed here are not checked. "s3" has no Task integration: s3:getObject / s3:listObjectsV2 are only an
+# ItemReader Resource and s3:putObject only a ResultWriter Resource (input-output-itemreader.html, input-output-resultwriter.html).
+OPTIMIZED_ACTIONS: dict[str, tuple[str, ...]] = {
+    "apigateway": ("invoke",),  # connect-api-gateway.html
+    "athena": ("getQueryExecution", "getQueryResults", "startQueryExecution", "stopQueryExecution"),  # connect-athena.html
+    "batch": ("submitJob",),  # connect-batch.html
+    "bedrock": ("createModelCustomizationJob", "invokeModel"),  # connect-bedrock.html
+    "bedrockagentcore": ("invokeHarness",),  # connect-bedrockagentcore.html
+    "codebuild": ("batchDeleteBuilds", "batchGetReports", "deleteBuildBatch", "retryBuildBatch", "startBuild",
+                  "startBuildBatch", "stopBuild", "stopBuildBatch"),  # connect-codebuild.html
+    "databrew": ("startJobRun",),  # connect-databrew.html
+    "dynamodb": ("deleteItem", "getItem", "putItem", "updateItem"),  # connect-ddb.html
+    "ecs": ("runTask",),  # connect-ecs.html
+    "eks": ("call", "createCluster", "createFargateProfile", "createNodegroup", "deleteCluster", "deleteFargateProfile",
+            "deleteNodegroup", "runJob"),  # connect-eks.html
+    "elasticmapreduce": ("addStep", "cancelStep", "createCluster", "modifyInstanceFleetByName", "modifyInstanceGroupByName",
+                         "setClusterTerminationProtection", "terminateCluster"),  # connect-emr.html
+    "emr-containers": ("createVirtualCluster", "deleteVirtualCluster", "startJobRun"),  # connect-emr-eks.html
+    "emr-serverless": ("cancelJobRun", "createApplication", "deleteApplication", "startApplication", "startJobRun",
+                       "stopApplication"),  # connect-emr-serverless.html
+    "events": ("putEvents",),  # connect-eventbridge.html
+    "glue": ("startJobRun",),  # connect-glue.html
+    "http": ("invoke",),  # call-https-apis.html
+    "lambda": ("invoke",),  # connect-lambda.html
+    "mediaconvert": ("createJob",),  # connect-mediaconvert.html
+    "s3": (),  # see above: no Task integration
+    "sagemaker": ("createEndpoint", "createEndpointConfig", "createHyperParameterTuningJob", "createLabelingJob", "createModel",
+                  "createProcessingJob", "createTrainingJob", "createTransformJob", "updateEndpoint"),  # connect-sagemaker.html
+    "sns": ("publish",),  # connect-sns.html
+    "sqs": ("sendMessage",),  # connect-sqs.html
+    "states": ("startExecution",),  # connect-stepfunctions.html
+}
+# aws-sdk service name for an optimized service whose name differs (default: the same name); None: no SDK equivalent
+# (https://docs.aws.amazon.com/step-functions/latest/dg/supported-services-awssdk.html)
+OPTIMIZED_SDK_SERVICE: dict[str, Optional[str]] = {
+    "apigateway": None, "http": None, "events": "eventbridge", "states": "sfn", "elasticmapreduce": "emr",
+    "emr-containers": "emrcontainers", "emr-serverless": "emrserverless",
+}
+# S028: service names that look right but are not aws-sdk service names (supported-services-awssdk.html: Step Functions is
+# "aws-sdk:sfn", EventBridge "aws-sdk:eventbridge", CloudWatch Logs "aws-sdk:cloudwatchlogs")
+SDK_SERVICE_ALIASES = {"states": "sfn", "stepfunctions": "sfn", "step-functions": "sfn", "events": "eventbridge",
+                       "logs": "cloudwatchlogs", "cloudwatch-logs": "cloudwatchlogs"}
+
+# S025: fields of the objects nested in states. Map ItemProcessor / ProcessorConfig: state-map-distributed.html and
+# state-map-inline.html; Parallel Branches: state-parallel.html; ItemReader / ReaderConfig: input-output-itemreader.html;
+# ItemBatcher: input-output-itembatcher.html; ResultWriter / WriterConfig: input-output-resultwriter.html; Credentials:
+# state-task.html. Comment / QueryLanguage are not documented inside ItemProcessor or a branch but are not flagged.
+NESTED_FIELDS: dict[str, tuple[str, ...]] = {
+    "ItemProcessor": ("ProcessorConfig", "StartAt", "States", "Comment", "QueryLanguage"),
+    "Iterator": ("ProcessorConfig", "StartAt", "States", "Comment", "QueryLanguage"),
+    "ProcessorConfig": ("Mode", "ExecutionType"),
+    "Branch": ("StartAt", "States", "Comment", "QueryLanguage"),
+    "ItemReader": ("Resource", "ReaderConfig", "Arguments", "Parameters"),
+    "ReaderConfig": ("InputType", "Transformation", "ManifestType", "CSVDelimiter", "CSVHeaderLocation", "CSVHeaders",
+                     "ItemsPointer", "MaxItems", "MaxItemsPath"),
+    "ItemBatcher": ("MaxItemsPerBatch", "MaxItemsPerBatchPath", "MaxInputBytesPerBatch", "MaxInputBytesPerBatchPath", "BatchInput"),
+    "ResultWriter": ("Resource", "Arguments", "Parameters", "WriterConfig"),
+    "WriterConfig": ("Transformation", "OutputType"),
+    "Credentials": ("RoleArn", "RoleArn.$"),
+}
+NESTED_JSONPATH_ONLY = {"MaxItemsPath": "MaxItems", "MaxItemsPerBatchPath": "MaxItemsPerBatch",
+                        "MaxInputBytesPerBatchPath": "MaxInputBytesPerBatch"}
+MAP_LEVEL_FIELDS = {"ItemReader", "ItemBatcher", "ResultWriter", "ItemSelector", "Items", "ItemsPath", "MaxConcurrency",
+                    "ToleratedFailureCount", "ToleratedFailurePercentage", "Label", "Next", "End", "Retry", "Catch",
+                    "Output", "ResultPath", "ResultSelector", "Assign"}
+PARALLEL_LEVEL_FIELDS = {"Next", "End", "Retry", "Catch", "Output", "Arguments", "Parameters", "ResultPath",
+                         "ResultSelector", "InputPath", "OutputPath", "Assign"}
+
+# S026: Distributed Map values. input-output-itemreader.html, input-output-itembatcher.html,
+# input-output-resultwriter.html, state-map-distributed.html (ToleratedFailure*, Label)
+READER_ENUMS = {"InputType": ("CSV", "JSON", "JSONL", "PARQUET", "MANIFEST"), "Transformation": ("NONE", "LOAD_AND_FLATTEN"),
+                "ManifestType": ("ATHENA_DATA", "S3_INVENTORY"), "CSVDelimiter": ("COMMA", "PIPE", "SEMICOLON", "SPACE", "TAB"),
+                "CSVHeaderLocation": ("FIRST_ROW", "GIVEN")}
+WRITER_ENUMS = {"Transformation": ("NONE", "COMPACT", "FLATTEN"), "OutputType": ("JSON", "JSONL")}
+ENUM_ALIASES = {"JSONLINES": "JSONL", "JSON_LINES": "JSONL", "NDJSON": "JSONL", "FLAT": "FLATTEN"}
+READER_MAX_ITEMS = 100_000_000
+BATCH_MAX_BYTES = 262_144  # "up to 256 KiB"
+LABEL_FORBIDDEN_RE = re.compile(r"[\s?*<>{}\[\]:;,\\|^~$#%&`\"\x00-\x1f\x7f-\x9f]")
+
+
+def iter_states(definition: dict):
+    """Every state, nested ones included, in document order per scope: (location, state, query language, express) where
+    express is the location of the closest enclosing Distributed Map whose ProcessorConfig.ExecutionType is "EXPRESS"
+    (its children are Express workflows), or None."""
+    top = definition.get("QueryLanguage", "JSONPath")
+    stack: list[tuple[str, Any, Optional[str]]] = [("/States", definition.get("States"), None)]
+    while stack:
+        base, states, express = stack.pop()
+        if not isinstance(states, dict):
+            continue
+        nested: list[tuple[str, Any, Optional[str]]] = []
+        for name, st in states.items():
+            if not isinstance(st, dict):
+                continue
+            loc = f"{base}/{name}"
+            yield loc, st, st.get("QueryLanguage", top), express
+            if st.get("Type") == "Map":
+                key = "ItemProcessor" if "ItemProcessor" in st else "Iterator"
+                proc = st.get(key)
+                if isinstance(proc, dict):
+                    cfg = proc.get("ProcessorConfig")
+                    inner = express
+                    if isinstance(cfg, dict) and cfg.get("Mode") == "DISTRIBUTED":
+                        inner = loc if cfg.get("ExecutionType") == "EXPRESS" else None
+                    nested.append((f"{loc}/{key}/States", proc.get("States"), inner))
+            elif st.get("Type") == "Parallel":
+                for i, b in enumerate(as_list(st.get("Branches"))):
+                    if isinstance(b, dict):
+                        nested.append((f"{loc}/Branches/{i}/States", b.get("States"), express))
+        stack.extend(reversed(nested))
+
+
+def check_duplicate_keys(definition: dict, diags: Diagnostics) -> None:
+    """S024: an object with the same key twice. Python's json (and many tools) keep the last value silently, so a
+    duplicate state name deletes a state and a duplicate field drops a value. Needs the definition as parsed by
+    json_loads (DupKeyDict), i.e. before clip_depth copies it."""
+    stack: list[tuple[Any, Any]] = [(definition, None)]  # (node, path as a linked list (key, parent))
+    while stack:
+        node, path = stack.pop()
+        if isinstance(node, DupKeyDict):
+            parts: list[str] = []
+            p = path
+            while p is not None:
+                parts.append(str(p[0]))
+                p = p[1]
+            where = "/" + "/".join(reversed(parts)) if parts else ""
+            for k in node.dup_keys:
+                if parts and parts[0] == "States":
+                    diags.error("S024", f"{where}/{k}", f'state name "{k}" is defined more than once in this States object; JSON keeps only '
+                                f'the last definition, so the earlier "{k}" state is silently lost. Give each state a unique name '
+                                "(and point the Next/Default/StartAt that should reach it at the new name), or delete the extra copy")
+                else:
+                    last = json.dumps(node[k])
+                    last = last if len(last) <= 60 else last[:57] + "..."
+                    diags.error("S024", f"{where}/{k}", f'key "{k}" appears more than once in this object; JSON keeps only the last value '
+                                f"({last}) and silently drops the others; keep exactly one \"{k}\"")
+        if isinstance(node, dict):
+            stack.extend((v, (k, path)) for k, v in node.items() if isinstance(v, (dict, list)))
+        elif isinstance(node, list):
+            stack.extend((v, (i, path)) for i, v in enumerate(node) if isinstance(v, (dict, list)))
+
+
+def check_optimized_actions(definition: dict, diags: Diagnostics) -> None:
+    """S023: an optimized integration (arn:aws:states:::<service>:<action>) only supports a fixed set of actions; any
+    other action of the service is called through the AWS SDK integration (arn:aws:states:::aws-sdk:<service>:<action>).
+    Sources: OPTIMIZED_ACTIONS."""
+    for loc, st, lang, _express in iter_states(definition):
+        res = st.get("Resource")
+        if st.get("Type") != "Task" or not isinstance(res, str) or is_expression(res) or RESOURCE_PLACEHOLDER_RE.sub("", res) != res:
+            continue
+        m = RESOURCE_INTEGRATION_RE.match(res)
+        if not m or m.group(2) not in OPTIMIZED_ACTIONS:
+            continue
+        part, service, rest = m.groups()
+        suffix = next((s for s in RESOURCE_SUFFIXES if rest.endswith(s)), "")
+        action = rest[:len(rest) - len(suffix)]
+        supported = OPTIMIZED_ACTIONS[service]
+        if action in supported or not re.match(r"^[A-Za-z][A-Za-z0-9]*$", action):  # malformed: reported by S019
+            continue
+        args = "Arguments" if lang == "JSONata" else "Parameters"
+        sdk_suffix = ".waitForTaskToken" if suffix == ".waitForTaskToken" else ""
+        if service == "s3":
+            diags.error("S023", f"{loc}/Resource", f'"{res}" is not a Task integration: "arn:{part}:states:::s3:..." is only valid as a '
+                        "Distributed Map ItemReader / ResultWriter Resource. In a Task call S3 through the AWS SDK integration "
+                        f'"arn:{part}:states:::aws-sdk:s3:{action}{sdk_suffix}" ({args} are the S3 API request parameters, e.g. '
+                        '{"Bucket": "...", "Key": "..."})')
+            continue
+        hint = suggest_field(action, set(supported))
+        sdk = OPTIMIZED_SDK_SERVICE.get(service, service)
+        if service == "bedrock" and re.match(r"^(converse|invokeModel|applyGuardrail)", action):
+            sdk = "bedrockruntime"
+        if hint and hint.lower() == f' (did you mean "{action}"?)'.lower():  # only the letter case is wrong
+            sdk = None
+        fix = (f'; to call {service} {action} use the AWS SDK integration "arn:{part}:states:::aws-sdk:{sdk}:{action}{sdk_suffix}" '
+               f"({args} are the API request parameters, PascalCase)") if sdk else \
+            (f'; use "arn:{part}:states:::{service}:invoke" and give the HTTP method in {args} ("Method": "GET", "POST", ...)'
+             if service in ("apigateway", "http") and not hint else "")
+        diags.error("S023", f"{loc}/Resource", f'the optimized {service} integration has no action "{action}"{hint}; it supports: '
+                    f'{", ".join(supported)}{fix}')
+
+
+def check_sdk_service_names(definition: dict, diags: Diagnostics) -> None:
+    """S028: aws-sdk service names that are not the SDK's name for the service (SDK_SERVICE_ALIASES)."""
+    for loc, st, _lang, _express in iter_states(definition):
+        res = st.get("Resource")
+        if st.get("Type") != "Task" or not isinstance(res, str) or is_expression(res):
+            continue
+        m = re.match(r"^arn:([^:]+):states:::aws-sdk:([^:]+):([A-Za-z0-9]+)", res)
+        if not m or m.group(2) not in SDK_SERVICE_ALIASES:
+            continue
+        wrong, action = m.group(2), m.group(3)
+        right = SDK_SERVICE_ALIASES[wrong]
+        fixed = res.replace(f":aws-sdk:{wrong}:", f":aws-sdk:{right}:", 1)
+        optimized = next((svc for svc, sdk in OPTIMIZED_SDK_SERVICE.items() if sdk == right), None)
+        alt = ""
+        if optimized and action in OPTIMIZED_ACTIONS.get(optimized, ()):
+            alt = f' (or the optimized integration "arn:{m.group(1)}:states:::{optimized}:{action}")'
+        diags.error("S028", f"{loc}/Resource", f'"{wrong}" is not an AWS SDK integration service name: use "{fixed}"{alt}')
+
+
+def _check_fields(obj: Any, kind: str, loc: str, lang: str, diags: Diagnostics, hint) -> None:
+    """S025 helper: unknown keys in a nested object; hint(key) may return a specific fix for a misplaced key."""
+    if not isinstance(obj, dict):
+        return
+    allowed = NESTED_FIELDS[kind]
+    for k in obj:
+        if k in allowed and not (lang == "JSONata" and k in NESTED_JSONPATH_ONLY):
+            continue
+        if k in allowed:
+            diags.error("S025", f"{loc}/{k}", f'"{k}" is JSONPath-only; in JSONata use "{NESTED_JSONPATH_ONLY[k]}" with a number or a '
+                        '"{% %}" expression')
+            continue
+        fix = hint(k) if hint else None
+        if not fix:
+            fix = f'unknown field{suggest_field(k, set(allowed))}; {kind} allows only: {", ".join(allowed)}'
+        diags.error("S025", f"{loc}/{k}", f'"{k}" is not valid inside {"a Parallel branch" if kind == "Branch" else kind}: {fix}')
+
+
+def check_nested_fields(definition: dict, diags: Diagnostics) -> None:
+    """S025: unknown or misplaced keys inside ItemProcessor, ProcessorConfig, Parallel branches, ItemReader, ReaderConfig,
+    ItemBatcher, ResultWriter, WriterConfig and Credentials (NESTED_FIELDS)."""
+    for loc, st, lang, _express in iter_states(definition):
+        stype = st.get("Type")
+        if stype == "Map":
+            key = "ItemProcessor" if "ItemProcessor" in st else "Iterator"
+            proc = st.get(key)
+            if isinstance(proc, dict):
+                def proc_hint(k: str, proc: dict = proc) -> Optional[str]:
+                    if k in ("Mode", "ExecutionType"):
+                        cfg = {f: proc[f] for f in ("Mode", "ExecutionType") if f in proc}
+                        return (f'{k} belongs inside ProcessorConfig: replace it with "ProcessorConfig": {json.dumps(cfg)} in the '
+                                f"{key}" + (" (as written, the Map runs INLINE)" if k == "Mode" else ""))
+                    if k in MAP_LEVEL_FIELDS:
+                        return f"{k} is a field of the Map state itself; move it out of {key}, next to \"{key}\""
+                    return None
+                _check_fields(proc, key, f"{loc}/{key}", lang, diags, proc_hint)
+                _check_fields(proc.get("ProcessorConfig"), "ProcessorConfig", f"{loc}/{key}/ProcessorConfig", lang, diags,
+                              lambda k: (f"{k} is a field of the Map state itself, not of ProcessorConfig; move it next to \"{key}\""
+                                         if k in MAP_LEVEL_FIELDS else 'to limit parallel child executions set "MaxConcurrency" on '
+                                         "the Map state itself" if "concurrency" in k.lower() else None))
+            reader = st.get("ItemReader")
+            if isinstance(reader, dict):
+                args = "Arguments" if lang == "JSONata" else "Parameters"
+                _check_fields(reader, "ItemReader", f"{loc}/ItemReader", lang, diags,
+                              lambda k: (f'{k} belongs inside "ReaderConfig": {{"{k}": ...}}' if k in NESTED_FIELDS["ReaderConfig"]
+                                         else f'{k} belongs inside "{args}": {{"Bucket": ..., "Key": ...}}'
+                                         if k in ("Bucket", "Key", "Prefix", "VersionId") else None))
+                _check_fields(reader.get("ReaderConfig"), "ReaderConfig", f"{loc}/ItemReader/ReaderConfig", lang, diags,
+                              lambda k: (f'{k} belongs inside the ItemReader "{args}" object, not ReaderConfig'
+                                         if k in ("Bucket", "Key", "Prefix") else None))
+            _check_fields(st.get("ItemBatcher"), "ItemBatcher", f"{loc}/ItemBatcher", lang, diags,
+                          lambda k: ('to cap the number of items per batch use "MaxItemsPerBatch"'
+                                     if re.search(r"size|items|count|batch", k, re.I) and "byte" not in k.lower() else None))
+            writer = st.get("ResultWriter")
+            if isinstance(writer, dict):
+                args = "Arguments" if lang == "JSONata" else "Parameters"
+                _check_fields(writer, "ResultWriter", f"{loc}/ResultWriter", lang, diags,
+                              lambda k: (f'{k} belongs inside "WriterConfig": {{"{k}": ...}}' if k in NESTED_FIELDS["WriterConfig"]
+                                         else f'{k} belongs inside "{args}": {{"Bucket": ..., "Prefix": ...}}'
+                                         if k in ("Bucket", "Prefix") else None))
+                _check_fields(writer.get("WriterConfig"), "WriterConfig", f"{loc}/ResultWriter/WriterConfig", lang, diags, None)
+        elif stype == "Parallel":
+            for i, b in enumerate(as_list(st.get("Branches"))):
+                _check_fields(b, "Branch", f"{loc}/Branches/{i}", lang, diags,
+                              lambda k: (f'{k} is a field of the Parallel state itself, not of a branch; move it out of "Branches" '
+                                         "(each branch ends with its own last state having \"End\": true)" if k in PARALLEL_LEVEL_FIELDS else None))
+        elif stype == "Task":
+            _check_fields(st.get("Credentials"), "Credentials", f"{loc}/Credentials", lang, diags,
+                          lambda k: 'the role goes in "RoleArn", e.g. "Credentials": {"RoleArn": "arn:aws:iam::123456789012:role/MyRole"}'
+                          if "role" in k.lower() else None)
+
+
+def _enum_hint(v: str, options: tuple[str, ...]) -> str:
+    up = v.upper()
+    best = ENUM_ALIASES.get(up) if ENUM_ALIASES.get(up) in options else None
+    best = best or next((o for o in options if o == up or o.startswith(up) and len(up) >= 3), None)
+    best = best or closest_name(v, options)
+    return f' (did you mean "{best}"?)' if best else ""
+
+
+def _check_enum(cfg: dict, field: str, options: tuple[str, ...], loc: str, diags: Diagnostics) -> None:
+    v = cfg.get(field)
+    if field in cfg and isinstance(v, str) and v not in options and not is_expression(v) and not is_placeholder(v):
+        diags.error("S026", f"{loc}/{field}", f'{field} must be one of {", ".join(options)}; got "{v}"{_enum_hint(v, options)}')
+    elif field in cfg and not isinstance(v, str) and not is_placeholder(v):
+        diags.error("S026", f"{loc}/{field}", f'{field} must be a string, one of {", ".join(options)}')
+
+
+def _literal(v: Any) -> bool:
+    """A value written in the definition (not a "{% %}" expression or a template placeholder)."""
+    return not is_expression(v) and not is_placeholder(v)
+
+
+def _args_missing(args: Any, keys: tuple[str, ...]) -> list[str]:
+    if not isinstance(args, dict):
+        return []
+    return [k for k in keys if k not in args and f"{k}.$" not in args]
+
+
+def check_distributed_map_config(definition: dict, diags: Diagnostics) -> None:
+    """S026: ItemReader, ItemBatcher, ResultWriter, ToleratedFailure* and Label values of Distributed Map states
+    (READER_ENUMS, WRITER_ENUMS; sources next to them)."""
+    labels: dict[str, str] = {}
+    for loc, st, lang, _express in iter_states(definition):
+        if st.get("Type") != "Map":
+            continue
+        args_key = "Arguments" if lang == "JSONata" else "Parameters"
+        reader = st.get("ItemReader")
+        if isinstance(reader, dict):
+            rloc = f"{loc}/ItemReader"
+            res = reader.get("Resource")
+            action = None
+            if "Resource" not in reader:
+                diags.error("S026", rloc, 'ItemReader needs "Resource": "arn:aws:states:::s3:getObject" (one file: JSON, JSONL, CSV, '
+                            'Parquet, manifest) or "arn:aws:states:::s3:listObjectsV2" (the objects under a prefix)')
+            elif isinstance(res, str) and _literal(res) and RESOURCE_PLACEHOLDER_RE.sub("", res) == res:
+                m = re.match(r"^arn:[^:]+:states:::s3:(getObject|listObjectsV2)$", res)
+                if m:
+                    action = m.group(1)
+                else:
+                    sm = re.search(r"s3:(\w+)$", res)
+                    guess = ' (did you mean "arn:aws:states:::s3:listObjectsV2"?)' if sm and sm.group(1).lower().startswith("listobjects") else \
+                        ' (did you mean "arn:aws:states:::s3:getObject"?)' if sm and sm.group(1).lower() == "getobject" else ""
+                    diags.error("S026", f"{rloc}/Resource", f'ItemReader Resource must be "arn:aws:states:::s3:getObject" or '
+                                f'"arn:aws:states:::s3:listObjectsV2"; got "{res}"{guess}')
+            rc = reader.get("ReaderConfig", {})
+            if isinstance(rc, dict):
+                cloc = f"{rloc}/ReaderConfig"
+                for f, options in READER_ENUMS.items():
+                    _check_enum(rc, f, options, cloc, diags)
+                if rc.get("ManifestType") == "S3_INVENTORY" and "InputType" in rc:
+                    diags.error("S026", f"{cloc}/InputType", 'with "ManifestType": "S3_INVENTORY" InputType must not be set (the '
+                                "inventory is read as CSV); remove InputType")
+                if rc.get("Transformation") == "LOAD_AND_FLATTEN" and "InputType" not in rc:
+                    diags.error("S026", cloc, '"Transformation": "LOAD_AND_FLATTEN" needs "InputType" (CSV, JSON, JSONL or PARQUET): '
+                                "the format of the listed objects")
+                if action == "getObject" and "InputType" not in rc and rc.get("ManifestType") != "S3_INVENTORY":
+                    diags.warn("S026", cloc if "ReaderConfig" in reader else rloc,
+                               'reading one S3 object with s3:getObject needs its format: add "ReaderConfig": {"InputType": "JSON"} '
+                               "(or CSV, JSONL, PARQUET, MANIFEST)")
+                if rc.get("CSVHeaderLocation") == "GIVEN" and "CSVHeaders" not in rc:
+                    diags.error("S026", f"{cloc}/CSVHeaderLocation", '"CSVHeaderLocation": "GIVEN" needs the column names in '
+                                '"CSVHeaders": ["col1", "col2", ...]; if the first row of the file is the header use "FIRST_ROW"')
+                hdr = rc.get("CSVHeaders")
+                if "CSVHeaders" in rc and _literal(hdr) and not (isinstance(hdr, list) and hdr and all(isinstance(h, str) for h in hdr)):
+                    diags.error("S026", f"{cloc}/CSVHeaders", 'CSVHeaders must be a non-empty array of column names, e.g. ["id", "name"]')
+                if rc.get("InputType") == "CSV" and "CSVHeaderLocation" not in rc:
+                    diags.warn("S026", cloc, 'a CSV dataset needs a column header: add "CSVHeaderLocation": "FIRST_ROW" (the first row is '
+                               'the header) or "CSVHeaderLocation": "GIVEN" with "CSVHeaders": [...]')
+                mi = rc.get("MaxItems")
+                if "MaxItems" in rc and _literal(mi) and not (is_int(mi) and 0 <= mi <= READER_MAX_ITEMS):
+                    diags.error("S026", f"{cloc}/MaxItems", f"MaxItems must be an integer from 0 to {READER_MAX_ITEMS:,} (the most items "
+                                "a Distributed Map reads); remove it to read every item")
+            args = reader.get(args_key, reader.get("Arguments" if args_key == "Parameters" else "Parameters"))
+            need = ("Bucket", "Key") if action == "getObject" else ("Bucket",) if action else ()
+            if action and args is None:
+                diags.error("S026", rloc, f'ItemReader needs "{args_key}": {{{", ".join(f"{json.dumps(k)}: ..." for k in need)}}} '
+                            f'(the S3 {"object" if action == "getObject" else "bucket and prefix"} to read)')
+            for k in _args_missing(args, need):
+                diags.error("S026", f"{rloc}/{args_key if args_key in reader else 'Arguments' if 'Arguments' in reader else 'Parameters'}",
+                            f'ItemReader s3:{action} needs "{k}" (the S3 {"object key" if k == "Key" else "bucket name"})')
+        elif "ItemReader" in st and _literal(reader):
+            diags.error("S026", f"{loc}/ItemReader", 'ItemReader must be an object, e.g. {"Resource": "arn:aws:states:::s3:getObject", '
+                        '"ReaderConfig": {"InputType": "JSON"}, "Arguments": {"Bucket": "...", "Key": "..."}}')
+
+        batcher = st.get("ItemBatcher")
+        if isinstance(batcher, dict):
+            bloc = f"{loc}/ItemBatcher"
+            if not any(f in batcher for f in ("MaxItemsPerBatch", "MaxItemsPerBatchPath", "MaxInputBytesPerBatch", "MaxInputBytesPerBatchPath")):
+                diags.warn("S026", bloc, 'ItemBatcher needs a batch limit: add "MaxItemsPerBatch": <items per child execution> '
+                           f'and/or "MaxInputBytesPerBatch": <bytes, at most {BATCH_MAX_BYTES}>')
+            mib = batcher.get("MaxItemsPerBatch")
+            if "MaxItemsPerBatch" in batcher and _literal(mib) and not (is_int(mib) and mib > 0):
+                diags.error("S026", f"{bloc}/MaxItemsPerBatch", "MaxItemsPerBatch must be a positive integer")
+            mb = batcher.get("MaxInputBytesPerBatch")
+            if "MaxInputBytesPerBatch" in batcher and _literal(mb) and not (is_int(mb) and 0 < mb <= BATCH_MAX_BYTES):
+                diags.error("S026", f"{bloc}/MaxInputBytesPerBatch", f"MaxInputBytesPerBatch must be a positive integer of at most "
+                            f"{BATCH_MAX_BYTES} (256 KiB, the child execution input limit)")
+            check_batched_child_input(st, loc, definition.get("QueryLanguage", "JSONPath"), diags)
+        elif "ItemBatcher" in st and _literal(batcher):
+            diags.error("S026", f"{loc}/ItemBatcher", 'ItemBatcher must be an object, e.g. {"MaxItemsPerBatch": 100}')
+
+        writer = st.get("ResultWriter")
+        if isinstance(writer, dict):
+            wloc = f"{loc}/ResultWriter"
+            wargs_key = args_key if args_key in writer else "Arguments" if "Arguments" in writer else "Parameters"
+            if not writer:
+                diags.error("S026", wloc, 'ResultWriter cannot be empty: export the results with "Resource": "arn:aws:states:::s3:putObject" '
+                            f'and "{args_key}": {{"Bucket": "...", "Prefix": "..."}}, and/or format them with "WriterConfig": '
+                            '{"Transformation": "COMPACT", "OutputType": "JSON"}; or remove ResultWriter')
+            res = writer.get("Resource")
+            if "Resource" in writer and isinstance(res, str) and _literal(res) and RESOURCE_PLACEHOLDER_RE.sub("", res) == res \
+                    and not re.match(r"^arn:[^:]+:states:::s3:putObject$", res):
+                diags.error("S026", f"{wloc}/Resource", f'ResultWriter Resource must be "arn:aws:states:::s3:putObject"; got "{res}"')
+            if "Resource" in writer and wargs_key not in writer:
+                diags.error("S026", wloc, f'ResultWriter with a Resource needs "{args_key}": {{"Bucket": "...", "Prefix": "..."}} '
+                            "(where to write the results)")
+            elif wargs_key in writer and "Resource" not in writer:
+                diags.error("S026", wloc, f'ResultWriter "{wargs_key}" needs "Resource": "arn:aws:states:::s3:putObject"')
+            elif "Resource" in writer:
+                for k in _args_missing(writer.get(wargs_key), ("Bucket",)):
+                    diags.error("S026", f"{wloc}/{wargs_key}", 'ResultWriter needs "Bucket" (the S3 bucket to write the results to)')
+            wc = writer.get("WriterConfig")
+            if isinstance(wc, dict):
+                for f, options in WRITER_ENUMS.items():
+                    _check_enum(wc, f, options, f"{wloc}/WriterConfig", diags)
+        elif "ResultWriter" in st and _literal(writer):
+            diags.error("S026", f"{loc}/ResultWriter", 'ResultWriter must be an object, e.g. {"Resource": "arn:aws:states:::s3:putObject", '
+                        f'"{args_key}": {{"Bucket": "...", "Prefix": "..."}}}}')
+
+        pct = st.get("ToleratedFailurePercentage")
+        if "ToleratedFailurePercentage" in st and _literal(pct) and not (isinstance(pct, (int, float)) and not isinstance(pct, bool) and 0 <= pct <= 100):
+            diags.error("S026", f"{loc}/ToleratedFailurePercentage", "ToleratedFailurePercentage must be a number from 0 to 100 "
+                        "(100: never fail because of failed items)" + (' or a "{% %}" expression' if lang == "JSONata" else ""))
+        cnt = st.get("ToleratedFailureCount")
+        if "ToleratedFailureCount" in st and _literal(cnt) and not (is_int(cnt) and cnt >= 0):
+            diags.error("S026", f"{loc}/ToleratedFailureCount", "ToleratedFailureCount must be a non-negative integer"
+                        + (' or a "{% %}" expression' if lang == "JSONata" else ""))
+
+        label = st.get("Label")
+        if "Label" in st and _literal(label):
+            if not isinstance(label, str) or not label:
+                diags.error("S026", f"{loc}/Label", 'Label must be a non-empty string of at most 40 characters, e.g. "Label": "ProcessOrders"')
+                continue
+            bad = sorted(set(LABEL_FORBIDDEN_RE.findall(label)))
+            fixed = re.sub(r"-{2,}", "-", LABEL_FORBIDDEN_RE.sub("-", label)).strip("-")[:40] or "MapRun"
+            if bad:
+                shown = " ".join(json.dumps(c) for c in bad)
+                diags.error("S026", f"{loc}/Label", f"Label cannot contain whitespace, ? * < > {{ }} [ ] : ; , \\ | ^ ~ $ # % & ` \" or control "
+                            f'characters (found {shown}); e.g. "Label": "{fixed}"')
+            elif len(label) > 40:
+                diags.error("S026", f"{loc}/Label", f'Label is {len(label)} characters; the maximum is 40, e.g. "Label": "{fixed}"')
+            if label in labels:
+                diags.error("S026", f"{loc}/Label", f'Label "{label}" is already used at {labels[label]}; labels must be unique within the '
+                            "state machine")
+            else:
+                labels[label] = loc
+
+
+def check_batched_child_input(st: dict, loc: str, top_lang: str, diags: Diagnostics) -> None:
+    """S026: with ItemBatcher each child execution receives {"Items": [...], "BatchInput": ...}; a JSONata first child state
+    that reads another top-level field of $states.input reads nothing (input-output-itembatcher.html)."""
+    key = "ItemProcessor" if "ItemProcessor" in st else "Iterator"
+    proc = st.get(key)
+    if not isinstance(proc, dict) or not isinstance(proc.get("States"), dict) or not isinstance(proc.get("StartAt"), str):
+        return
+    first = proc["States"].get(proc["StartAt"])
+    if not isinstance(first, dict) or first.get("Type") in ("Map", "Parallel") or first.get("QueryLanguage", top_lang) != "JSONata":
+        return
+    for m in STATES_INPUT_PATH_RE.finditer(json.dumps(first)):
+        field = re.sub(r"\s+", "", m.group(1)).lstrip(".").split(".")[0]
+        if field not in ("Items", "BatchInput"):
+            diags.warn("S026", f"{loc}/{key}/States/{proc['StartAt']}", f'with ItemBatcher each child execution receives a batch '
+                       '{"Items": [<item>, ...], "BatchInput": ...}, not one item, so $states.input.' + field + " is undefined here; "
+                       "read the items from $states.input.Items (e.g. pass \"{% $states.input.Items %}\" to the function and loop over them "
+                       "there, or iterate them with an inline Map)")
+            return
+
+
+def check_express_limits(definition: dict, diags: Diagnostics, execution_type: str) -> None:
+    """S027: the child workflows of a Distributed Map with "ExecutionType": "EXPRESS" are Express workflows, so they
+    support neither .sync / .waitForTaskToken, nor activities, nor a nested Distributed Map, and run at most 5 minutes;
+    durations beyond 5 minutes are also flagged under --type EXPRESS (S020 reports the rest there).
+    https://docs.aws.amazon.com/step-functions/latest/dg/choosing-workflow-type.html,
+    https://docs.aws.amazon.com/step-functions/latest/dg/state-map-distributed.html"""
+    for loc, st, _lang, express in iter_states(definition):
+        stype = st.get("Type")
+        where = (f'this state runs in the child workflows of the Distributed Map at {express}, whose "ExecutionType" is "EXPRESS"'
+                 if express else "")
+        to_standard = (f'or set "ExecutionType": "STANDARD" in the ProcessorConfig of {express}')
+        if express and execution_type != "EXPRESS":
+            res = st.get("Resource")
+            if stype == "Task" and isinstance(res, str) and not is_expression(res):
+                m = re.search(r"\.(sync(?::2)?|waitForTaskToken)$", res)
+                if m:
+                    what = "Run a Job (.sync)" if m.group(1).startswith("sync") else "callback (.waitForTaskToken)"
+                    diags.error("S027", f"{loc}/Resource", f'{where}; Express workflows do not support the {what} pattern. Use '
+                                f'"{res[:m.start()]}" (request-response){" and poll with a Wait + Choice loop" if what.startswith("Run") else ""}, '
+                                f"{to_standard}")
+                if RESOURCE_ACTIVITY_RE.match(RESOURCE_PLACEHOLDER_RE.sub("__TPL__", res)):
+                    diags.error("S027", f"{loc}/Resource", f"{where}; Express workflows do not support activities. Call the worker "
+                                f'through "arn:aws:states:::lambda:invoke" (or another integration), {to_standard}')
+            if stype == "Map":
+                key = "ItemProcessor" if "ItemProcessor" in st else "Iterator"
+                cfg = st.get(key).get("ProcessorConfig") if isinstance(st.get(key), dict) else None
+                if isinstance(cfg, dict) and cfg.get("Mode") == "DISTRIBUTED":
+                    diags.error("S027", f"{loc}/{key}/ProcessorConfig/Mode", f'{where}; Express workflows do not support a Distributed '
+                                f'Map. Use "Mode": "INLINE" here, {to_standard}')
+        if not express and execution_type != "EXPRESS":
+            continue
+        where = f"{where}; an" if express else "An"
+        fix = to_standard if express else "or create the state machine as STANDARD"
+        if stype == "Wait" and is_int(st.get("Seconds")) and st["Seconds"] > 300:
+            diags.warn("S027", f"{loc}/Seconds", f"{where} Express execution runs at most 300 seconds (5 minutes), so this "
+                       f"{st['Seconds']}-second Wait ends in a States.Timeout failure. Wait at most 300 seconds, {fix}")
+        if stype == "Task" and is_int(st.get("TimeoutSeconds")) and st["TimeoutSeconds"] > 300:
+            diags.warn("S027", f"{loc}/TimeoutSeconds", f"{where} Express execution runs at most 300 seconds (5 minutes), so "
+                       f'TimeoutSeconds {st["TimeoutSeconds"]} is never reached. Set "TimeoutSeconds": 300 or less, {fix}')
+
+
+# ---------------------------------------------------------------------------
 # Entry points
 # ---------------------------------------------------------------------------
 
 
 def lint_definition(definition: dict, diags: Diagnostics, jsonata=None, execution_type: str = "STANDARD") -> None:
+    check_duplicate_keys(definition, diags)
     definition = clip_depth(definition, diags)
     top_lang = definition.get("QueryLanguage", "JSONPath")
     if top_lang not in ("JSONPath", "JSONata"):
@@ -3012,6 +3535,11 @@ def lint_definition(definition: dict, diags: Diagnostics, jsonata=None, executio
     scope.analyse()
     scope.finish(set(), None)
     check_unused_variables(definition, diags)
+    check_optimized_actions(definition, diags)
+    check_sdk_service_names(definition, diags)
+    check_nested_fields(definition, diags)
+    check_distributed_map_config(definition, diags)
+    check_express_limits(definition, diags, execution_type)
     if execution_type == "EXPRESS":
         check_express_mode(definition, diags)
 
