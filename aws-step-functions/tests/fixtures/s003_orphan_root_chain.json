@@ -1,0 +1,25 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Start",
+  "States": {
+    "Start": {
+      "Type": "Pass",
+      "End": true
+    },
+    "Refund": {
+      "Type": "Pass",
+      "Next": "Notify"
+    },
+    "Notify": {
+      "Type": "Pass",
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    },
+    "Audit": {
+      "Type": "Pass",
+      "Next": "Done"
+    }
+  }
+}

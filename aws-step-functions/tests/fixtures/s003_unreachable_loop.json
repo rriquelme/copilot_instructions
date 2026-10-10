@@ -1,0 +1,27 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Start",
+  "States": {
+    "Start": {
+      "Type": "Pass",
+      "End": true
+    },
+    "Fetch": {
+      "Type": "Pass",
+      "Next": "More?"
+    },
+    "More?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% $states.input.more %}",
+          "Next": "Fetch"
+        }
+      ],
+      "Default": "Finished"
+    },
+    "Finished": {
+      "Type": "Succeed"
+    }
+  }
+}

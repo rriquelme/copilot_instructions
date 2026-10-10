@@ -12,14 +12,22 @@ Usage:
     python3 lint_asl.py --type EXPRESS <file>  also enforce Express workflow limits (no .sync,
                                              no .waitForTaskToken, no Distributed Map, no
                                              activities, <= 300 s); default --type STANDARD
+    python3 lint_asl.py --format text|json|github|sarif <file>   output format (--json = --format json)
+    python3 lint_asl.py --strict <file>      exit 1 on WARNING too;  --quiet hides INFO
+    python3 lint_asl.py --list-codes         every diagnostic code;  --explain S017: how to fix one
+    --show-suppressed                        list diagnostics silenced by "lint-allow <CODE>: <reason>"
+                                             in a state's Comment
 
-Exit code 0 clean, 1 when any ERROR is reported, 2 when nothing could be linted (no definition
-found, invalid JSON, unreadable file), 3 on a linter internal error. Standard library only (Python 3.9+).
+Text output: <file>:<line>: SEVERITY CODE <location>: <message>, in document order.
+Exit code 0 clean, 1 when any ERROR is reported (or WARNING with --strict), 2 when nothing could be
+linted (no definition found, invalid JSON, unreadable file) or on a usage error, 3 on a linter
+internal error. Standard library only (Python 3.9+).
 If the optional `jsonata-python` package is installed (pip install jsonata-python) every
 {% %} expression is also parsed for syntax.
 """
 from __future__ import annotations
 
+import argparse
 import bisect
 import functools
 import glob
@@ -403,8 +411,11 @@ class Diagnostics:
     def __init__(self) -> None:
         self.items: list[dict[str, str]] = []
 
+        self.suppressed: list[dict] = []  # items silenced by a "lint-allow <CODE>: <reason>" state Comment
+        self.positions: dict[int, int] = {}  # id(item) -> offset of its location in the source (document order)
+
     def add(self, severity: str, code: str, location: str, message: str) -> None:
-        self.items.append({"severity": severity, "code": code, "location": location, "message": message})
+        self.items.append({"severity": severity, "code": code, "location": location, "message": message, "line": None})
 
     def error(self, code: str, loc: str, msg: str) -> None:
         self.add("ERROR", code, loc, msg)
@@ -2035,6 +2046,10 @@ def jsonpath_var_reads(key_path: str, key: str, value: Any) -> set[str]:
 # ---------------------------------------------------------------------------
 
 
+SUGGEST_BUDGET = 20_000  # state-name comparisons per file (lint_text call) for S002 "did you mean" hints
+_suggest_budget = {"left": SUGGEST_BUDGET}
+
+
 class Scope:
     def __init__(self, *, states: dict, start_at: Any, location: str, top_lang: str, diags: Diagnostics, jsonata,
                  all_names: dict[str, str], all_assigned: dict[str, str], outer_assigned: set[str], distributed: bool) -> None:
@@ -2070,6 +2085,10 @@ class Scope:
             elsewhere = ""
             if to in self.all_names:
                 elsewhere = f' ("{to}" exists at {self.all_names[to]}, but transitions cannot cross Map/Parallel scope boundaries)'
+            else:
+                guess = self.closest_state(to, frm)
+                if guess:
+                    elsewhere = f' (did you mean "{guess}"?)'
             self.diags.error("S002", loc, f'{field} targets "{to}", which is not a state in this scope{elsewhere}')
             return
         self.edges.append((frm, to, gen, via))
@@ -2122,10 +2141,80 @@ class Scope:
                 for to in succ.get(n, ()):
                     if to not in self.reachable:
                         stack.append(to)
-        for name in self.names:
-            if name not in self.reachable and not is_placeholder(name) and not getattr(self, "tpl_target", False):
-                d.error("S003", f"{self.location}/{name}", f'state "{name}" is unreachable: nothing transitions to it (orphan)')
+        if not getattr(self, "tpl_target", False):
+            self.report_orphans([n for n in self.names if n not in self.reachable and not is_placeholder(n)])
         self.check_termination()
+
+    # -- S002 "did you mean" / S003 orphan roots --------------------------------
+    MAX_ORPHAN_LIST = 50  # states named in one S003 message; the rest are counted
+
+    def closest_state(self, to: str, frm: str) -> Optional[str]:
+        """The state of this scope that `to` is probably a typo of (never `frm` itself), remembered so that S003 does
+        not also report it as unreachable: the typo is the cause."""
+        if _suggest_budget["left"] < len(self.names):
+            return None
+        _suggest_budget["left"] -= len(self.names)
+        guess = closest_name(to, [n for n in self.names if n != frm])
+        if guess:
+            self.__dict__.setdefault("suggested", set()).add(guess)
+        return guess
+
+    def report_orphans(self, unreached: list[str]) -> None:
+        """S003 once per orphan root (an unreachable state that no other unreachable state transitions to, or the
+        first state of an unreachable loop that nothing outside it enters); the states reachable only through a root
+        are listed in its message. States named by an S002 "did you mean" (and what follows them) are skipped."""
+        if not unreached:
+            return
+        pending = set(unreached)
+        succ: dict[str, list[str]] = {}
+        has_pred: set[str] = set()
+        for frm, to, _gen, _via in self.edges:
+            if frm in pending and to in pending and frm != to:
+                succ.setdefault(frm, []).append(to)
+                has_pred.add(to)
+        covered: set[str] = set()
+        order = {n: k for k, n in enumerate(self.names)}
+
+        def claim(root: str) -> list[str]:
+            """Mark everything reachable from root (within the unreachable states) as covered; the newly covered states
+            other than root, in document order."""
+            covered.add(root)
+            stack, got = [root], []
+            while stack:
+                for to in succ.get(stack.pop(), ()):
+                    if to not in covered:
+                        covered.add(to)
+                        got.append(to)
+                        stack.append(to)
+            return got
+
+        for name in unreached:
+            if name in self.__dict__.get("suggested", ()):
+                claim(name)
+        rest: list[tuple[str, Optional[list[str]], list[str]]] = [  # (root, its loop or None, states through it)
+            (n, None, claim(n)) for n in unreached if n not in has_pred and n not in covered]
+        left = [n for n in unreached if n not in covered]
+        if left:  # unreachable loops: report each loop that nothing outside it enters, at its first state
+            left_set = set(left)
+            comps = self.sccs(left, {n: [t for t in succ.get(n, ()) if t in left_set] for n in left})
+            comp_of = {n: k for k, comp in enumerate(comps) for n in comp}
+            entered = {comp_of[t] for n in left for t in succ.get(n, ()) if t in left_set and comp_of[t] != comp_of[n]}
+            for k in sorted((k for k in range(len(comps)) if k not in entered), key=lambda k: order[comps[k][0]]):
+                if comps[k][0] not in covered:
+                    rest.append((comps[k][0], comps[k], claim(comps[k][0])))
+        for name, loop, through in sorted(rest, key=lambda r: order[r[0]]):
+            members = set(loop or ())
+            through = sorted((n for n in through if n not in members), key=lambda n: order[n])
+            why = ("nothing transitions to it (orphan)" if loop is None else
+                   "only states in its own loop (" + ", ".join(f'"{m}"' for m in loop) + ") transition to it, and no state outside the loop does")
+            also = ""
+            if through:
+                shown = through[:self.MAX_ORPHAN_LIST]
+                more = f" and {len(through) - len(shown)} more" if len(through) > len(shown) else ""
+                also = f"; also unreachable through it: {', '.join(shown)}{more}"
+            fix = ("connect it: point a \"Next\", \"Default\", Choices rule or Catch of a reachable state at it (or StartAt), or delete it"
+                   + (" together with the states listed" if through else ""))
+            self.diags.error("S003", f"{self.location}/{name}", f'state "{name}" is unreachable: {why}{also}; {fix}')
 
     # -- termination / loop checks (S016, S017, S018) ---------------------------
     def sccs(self, nodes: list[str], adj: dict[str, list[str]]) -> list[list[str]]:
@@ -3107,11 +3196,479 @@ def nothing_found_message(text: str, filename: Optional[str]) -> str:
             '"States"; pass the definition JSON file (or pipe it to: python3 lint_asl.py -)')
 
 
+# ---------------------------------------------------------------------------
+# Diagnostic codes (--list-codes, --explain, SARIF rules)
+# ---------------------------------------------------------------------------
+# CODES: every code the linter emits -> (usual severity, title, fix recipe with a tiny before/after example).
+# Some codes are also emitted with another severity for milder cases; the message always says what to do.
+# Keep this one block, sorted by code: new codes (e.g. S040-S059) are added here.
+CODES: dict[str, tuple[str, str, str]] = {
+    "J000": ("ERROR", "query language of the state machine",
+             'A JSONata state machine (top-level "QueryLanguage": "JSONata") cannot contain JSONPath states; the INFO variant only '
+             'recommends JSONata for new machines. Remove the per-state "QueryLanguage": "JSONPath" and convert that state\'s '
+             'fields. Before: {"Type": "Pass", "QueryLanguage": "JSONPath", "Parameters": {"id.$": "$.id"}, "End": true} '
+             'After: {"Type": "Pass", "Output": {"id": "{% $states.input.id %}"}, "End": true}'),
+    "J001": ("ERROR", "field belongs to the other query language",
+             "JSONata states use Arguments, Output, Assign and Condition; JSONPath states use Parameters, InputPath, ResultSelector, "
+             "ResultPath, OutputPath and Variable rules. Replace the field with its equivalent (the message names it). "
+             'Before (JSONata): "Parameters": {"FunctionName": "f"}, "ResultPath": "$.r" '
+             'After: "Arguments": {"FunctionName": "f"}, "Output": {"r": "{% $states.result %}"}'),
+    "J002": ("ERROR", '".$" key in a JSONata state',
+             'In JSONata the ".$" suffix does nothing; drop it and write the value as a {% %} expression. '
+             'Before: "Arguments": {"id.$": "$.id"}  After: "Arguments": {"id": "{% $states.input.id %}"}'),
+    "J003": ("ERROR", "malformed {% %} expression or plain string",
+             'A JSONata value is either a JSON literal or one string that starts with "{%" and ends with "%}". A number field '
+             'takes a number, not a string. Before: "Seconds": "10", "Output": "{% $x"  After: "Seconds": 10, "Output": "{% $x %}"'),
+    "J004": ("ERROR", "$states.result / $states.errorOutput used where it is not set",
+             "$states.result exists only in Output and Assign of Task, Map and Parallel states; $states.errorOutput only inside a "
+             'Catch (Output/Assign). Before: "Arguments": {"r": "{% $states.result %}"}  After: move it to the Output of the '
+             'state that produced it: "Output": {"r": "{% $states.result %}"}'),
+    "J005": ("ERROR", "unknown JSONata function",
+             "Use a JSONata 2.0.6 or Step Functions function (the message suggests the closest one). "
+             'Before: "{% $toUpper($name) %}"  After: "{% $uppercase($name) %}"'),
+    "J006": ("ERROR", "JSONata syntax error",
+             "The expression does not parse (reported only when jsonata-python is installed). Fix the syntax at the position "
+             'given. Before: "{% $sum($states.input.items.price %}"  After: "{% $sum($states.input.items.price) %}"'),
+    "J007": ("ERROR", "invalid JSONata operator",
+             "JSONata uses = and != for comparison, and/or for logic, & to join strings. "
+             'Before: "{% $a == 1 && $b %}"  After: "{% $a = 1 and $b %}"'),
+    "J008": ("ERROR", "intrinsic function in a JSONata expression",
+             "States.Format, States.ArrayLength, ... are JSONPath-only; use the JSONata equivalent. "
+             'Before: "{% States.Format(\'Hi {}\', $name) %}"  After: "{% \'Hi \' & $name %}"'),
+    "J009": ("ERROR", "JSONPath syntax inside a JSONata expression",
+             "$$. (context) and $.field (input) are JSONPath; in JSONata use $states.context and $states.input. "
+             'Before: "{% $$.Execution.Id %}", "{% $.id %}"  After: "{% $states.context.Execution.Id %}", "{% $states.input.id %}"'),
+    "J012": ("ERROR", "Choice Condition is not a {% %} expression",
+             "A JSONata Choice rule needs a Condition expression that evaluates to true or false. "
+             'Before: {"Condition": "$.ok", "Next": "A"}  After: {"Condition": "{% $states.input.ok %}", "Next": "A"}'),
+    "J013": ("ERROR", "unknown $states field or context field",
+             "$states has only input, result, errorOutput and context; context fields follow the Step Functions context object. "
+             'Before: "{% $states.inputs.id %}"  After: "{% $states.input.id %}"'),
+    "J014": ("ERROR", "wrong number of arguments to a JSONata function",
+             "Call the function with the arguments it takes (the message gives an example). "
+             'Before: "{% $substring($s) %}"  After: "{% $substring($s, 0, 3) %}"'),
+    "P001": ("INFO", "lambda:invoke output is wrapped",
+             "lambda:invoke returns {ExecutedVersion, Payload, StatusCode}; usually only Payload is wanted. "
+             'Before: no Output  After: "Output": "{% $states.result.Payload %}" (JSONPath: "OutputPath": "$.Payload")'),
+    "P002": ("WARNING", "callback task without a timeout",
+             ".waitForTaskToken tasks wait up to one year unless a timeout is set. "
+             'Before: {"Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken", ...}  After: add '
+             '"TimeoutSeconds": 3600, "HeartbeatSeconds": 300'),
+    "P003": ("WARNING", "terminal error listed in Retry",
+             "Some errors (e.g. States.Runtime, States.DataLimitExceeded) are never retried; remove them from Retry and handle "
+             'them with Catch. Before: "Retry": [{"ErrorEquals": ["States.Runtime"]}]  After: "Catch": [{"ErrorEquals": '
+             '["States.Runtime"], "Next": "HandleError"}]'),
+    "P004": ("ERROR", "MaxDelaySeconds misuse",
+             "MaxDelaySeconds must be a positive integer and only caps an exponential backoff (BackoffRate > 1). "
+             'Before: {"ErrorEquals": ["States.ALL"], "MaxDelaySeconds": 0}  After: {"ErrorEquals": ["States.ALL"], '
+             '"BackoffRate": 2, "MaxDelaySeconds": 30}'),
+    "P005": ("INFO", "Lambda task without a retry for transient errors",
+             "Add the retrier shown in the message as the first entry of Retry. Before: no Retry  After: "
+             '"Retry": [{"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", '
+             '"Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2, "JitterStrategy": "FULL"}]'),
+    "P010": ("ERROR", '".$" key without a path value',
+             'A key ending in ".$" takes a JSONPath ("$.x", "$$.x", "$var") or an intrinsic call; a constant needs a key without ".$". '
+             'Before: "status.$": "DONE"  After: "status": "DONE" (or "status.$": "$.status")'),
+    "P011": ("ERROR", "malformed intrinsic function call",
+             "Write States.<Function>(args) with single-quoted string literals and the right number of arguments. "
+             'Before: "States.Format(\\"Hi {}\\", $.name)"  After: "States.Format(\'Hi {}\', $.name)"'),
+    "P012": ("ERROR", "invalid JSONPath in a path field",
+             'InputPath, ResultPath, OutputPath, ... take a JSONPath starting with "$". '
+             'Before: "ResultPath": "result"  After: "ResultPath": "$.result"'),
+    "S000": ("ERROR", "input could not be linted, or top-level field",
+             "Invalid JSON, no definition found, an unknown or invalid top-level field, or a linter note (INFO). Do what the "
+             'message says and re-run. Before: {"StartAt": "A", "States": {...}, "Timeout": 60}  After: {"StartAt": "A", '
+             '"States": {...}, "TimeoutSeconds": 60}'),
+    "S001": ("ERROR", "StartAt or States missing or wrong",
+             "StartAt must name a state of the same States object. "
+             'Before: "StartAt": "Frist", "States": {"First": {...}}  After: "StartAt": "First"'),
+    "S002": ("ERROR", "transition to a state that does not exist",
+             "Next, Default and Catch.Next must name a state in the same scope (states inside a Map/Parallel cannot jump "
+             'outside it). Before: "Next": "ChargeOrdr"  After: "Next": "ChargeOrder"'),
+    "S003": ("ERROR", "unreachable state",
+             "Nothing transitions to the state (the states listed in the message are reachable only through it). Connect it "
+             'from a reachable state or delete it. Before: "A": {"Type": "Pass", "End": true}, "B": {...}  After: '
+             '"A": {"Type": "Pass", "Next": "B"}, "B": {...}'),
+    "S004": ("ERROR", "Next/End missing or not allowed",
+             'Task, Pass, Wait, Map and Parallel need "Next" or "End": true; Choice, Succeed and Fail must have neither. '
+             'Before: {"Type": "Pass"}, {"Type": "Succeed", "End": true}  After: {"Type": "Pass", "End": true}, {"Type": "Succeed"}'),
+    "S005": ("ERROR", "both Next and End",
+             'Use exactly one. Before: {"Type": "Pass", "Next": "B", "End": true}  After: {"Type": "Pass", "Next": "B"}'),
+    "S006": ("ERROR", "Choice state rules",
+             "A Choice needs a non-empty Choices array of rules, each with a condition and Next; add a Default (WARNING when "
+             'missing). Before: {"Type": "Choice", "Choices": [{"Condition": "{% $x > 1 %}"}]}  After: {"Type": "Choice", '
+             '"Choices": [{"Condition": "{% $x > 1 %}", "Next": "Big"}], "Default": "Small"}'),
+    "S007": ("ERROR", "duplicate state name",
+             "State names must be unique in the whole state machine, including inside Map and Parallel. Rename one and update "
+             'every Next/StartAt/Default that targets it. Before: two states named "Check"  After: "CheckOrder" and "CheckStock"'),
+    "S008": ("ERROR", "state name too long",
+             'State names are at most 80 characters. Before: "ProcessTheIncomingOrderAndThen..." (90 chars)  After: "ProcessOrder"'),
+    "S009": ("ERROR", "state shape: Type, unknown field, field type",
+             "Each state is an object with a valid Type and only the fields that Type allows (the message suggests the right "
+             'name). Before: {"Type": "Pass", "Nxt": "B"}  After: {"Type": "Pass", "Next": "B"}'),
+    "S010": ("ERROR", "Wait state fields",
+             "A Wait needs exactly one of Seconds, Timestamp, SecondsPath, TimestampPath; Seconds is a non-negative integer. "
+             'Before: {"Type": "Wait", "Seconds": "10", "Next": "B"}  After: {"Type": "Wait", "Seconds": 10, "Next": "B"}'),
+    "S011": ("ERROR", "Fail state fields",
+             "Use Error or ErrorPath (not both) and Cause or CausePath (not both), as strings. "
+             'Before: {"Type": "Fail", "Error": "X", "ErrorPath": "$.e"}  After: {"Type": "Fail", "Error": "X"}'),
+    "S012": ("ERROR", "Retry/Catch shape or error names",
+             "Retry and Catch are arrays of objects with a non-empty ErrorEquals; a catcher needs Next; States.ALL must be alone "
+             'and last. Before: "Catch": [{"ErrorEquals": ["States.ALL"]}]  After: "Catch": [{"ErrorEquals": ["States.ALL"], '
+             '"Next": "HandleError"}]'),
+    "S013": ("ERROR", "Map/Parallel structure",
+             "A Map needs an ItemProcessor (StartAt + States; Iterator is deprecated) and a Parallel a non-empty Branches array. "
+             'Before: {"Type": "Map", "Iterator": {"StartAt": "S", "States": {...}}}  After: {"Type": "Map", "ItemProcessor": '
+             '{"ProcessorConfig": {"Mode": "INLINE"}, "StartAt": "S", "States": {...}}}'),
+    "S014": ("ERROR", "Retry/Catch on a state that cannot fail",
+             "Only Task, Map and Parallel states take Retry and Catch; move them to the state that can fail. "
+             'Before: {"Type": "Pass", "Retry": [...]}  After: {"Type": "Pass"} and "Retry": [...] on the Task'),
+    "S015": ("ERROR", "Task state fields",
+             "A Task needs a constant Resource ARN and the fields its integration requires; timeouts are positive integers. "
+             'Before: "Arguments": {"Payload": "{% $states.input %}"} (lambda:invoke)  After: "Arguments": {"FunctionName": '
+             '"my-fn", "Payload": "{% $states.input %}"}'),
+    "S016": ("ERROR", "the execution can never finish",
+             "No path from these states reaches a Succeed/Fail state or a state with End. Add an exit. Before: A -> B -> A  "
+             'After: B is a Choice: {"Choices": [{"Condition": "{% $done %}", "Next": "Finished"}], "Default": "A"}'),
+    "S017": ("WARNING", "loop without a Wait state",
+             "A polling loop without a Wait burns state transitions. Insert a Wait and cap the polls; for a bounded loop add "
+             '"lint-allow S017: <reason>" to the Comment of the reported state. Before: Poll -> Check -> Poll  After: '
+             'Poll -> Check -> Pause -> Poll with "Pause": {"Type": "Wait", "Seconds": 10, "Next": "Poll"}'),
+    "S018": ("WARNING", "Catch loops back to the failing state",
+             "A persistent error then retries forever; use Retry for retries and point Catch at an error handler. "
+             'Before: "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "CallApi"}] on CallApi  After: "Retry": [{"ErrorEquals": '
+             '["States.ALL"], "MaxAttempts": 3, "BackoffRate": 2}], "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Failed"}]'),
+    "S019": ("ERROR", "invalid Task Resource ARN",
+             "Use a valid Lambda, activity or arn:<partition>:states:::<service>:<action>[.sync|.waitForTaskToken] ARN. "
+             'Before: "arn:aws:states:::aws-sdk:s3:GetObject"  After: "arn:aws:states:::aws-sdk:s3:getObject"'),
+    "S020": ("ERROR", "not supported in Express workflows",
+             "Express workflows (--type EXPRESS) have no .sync, .waitForTaskToken, activities or Distributed Map and run at "
+             'most 300 s. Before: "arn:aws:states:::glue:startJobRun.sync"  After: "arn:aws:states:::glue:startJobRun" '
+             "(or make the workflow STANDARD)"),
+    "S021": ("ERROR", "JSONPath Choice rule shape or operand type",
+             "A rule has Variable plus exactly one comparison of the right type, or And/Or/Not. "
+             'Before: {"Variable": "$.n", "NumericEquals": "10", "Next": "X"}  After: {"Variable": "$.n", "NumericEquals": 10, '
+             '"Next": "X"}'),
+    "S022": ("ERROR", "Next/Assign on a nested Choice rule",
+             "Only top-level Choices rules take Next (and Assign/Comment); move it out of And/Or/Not. "
+             'Before: {"And": [{"Variable": "$.a", "IsPresent": true, "Next": "X"}]}  After: {"And": [{"Variable": "$.a", '
+             '"IsPresent": true}], "Next": "X"}'),
+    "V001": ("ERROR", "variable never assigned",
+             "The variable is read but no Assign sets it (the message may suggest the intended name). "
+             'Before: "{% $orderID %}" with "Assign": {"orderId": ...}  After: "{% $orderId %}"'),
+    "V002": ("ERROR", "variable not assigned on every path / not visible here",
+             "Assign it on every path that reaches this state (e.g. in the first state), and remember that variables assigned "
+             'inside a Map/Parallel are not visible outside. Before: only one Choice branch assigns $total  After: "Assign": '
+             '{"total": 0} in the first state'),
+    "V003": ("ERROR", "outer variable read in a Distributed Map",
+             "Distributed Map child workflows cannot see outer variables; pass them in through ItemSelector. "
+             'Before: "{% $limit %}" inside the Map  After: "ItemSelector": {"limit": "{% $limit %}", "item": '
+             '"{% $states.context.Map.Item.Value %}"} and read $states.input.limit'),
+    "V004": ("ERROR", "variable shadows an outer variable",
+             "A Map/Parallel scope cannot assign a variable that an enclosing scope also assigns; rename the inner one. "
+             'Before: inner "Assign": {"total": ...}  After: inner "Assign": {"itemTotal": ...}'),
+    "V005": ("WARNING", "Pass state only assigns variables",
+             "Fold the Assign into the previous state (or the matching Choices rule) and delete the Pass state. "
+             'Before: A -> SetVars {"Type": "Pass", "Assign": {"x": 1}, "Next": "B"}  After: A with "Assign": {"x": 1}, "Next": "B"'),
+    "V006": ("WARNING", "variable never read",
+             'Delete the unused Assign entry. Before: "Assign": {"id": "{% $states.input.id %}", "tmp": 1}  After: '
+             '"Assign": {"id": "{% $states.input.id %}"}'),
+    "V007": ("ERROR", "invalid variable name in Assign",
+             "Variable names are identifiers (letters, digits, _; no leading digit; at most 80 characters). "
+             'Before: "Assign": {"order-id": 1}  After: "Assign": {"order_id": 1}, read as $order_id'),
+}
+
+
+# ---------------------------------------------------------------------------
+# Output: source line numbers, document order, "lint-allow" suppressions, formats
+# ---------------------------------------------------------------------------
+
+JSON_TOKEN_RE = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"|[{}\[\],:]|[^\s{}\[\],:"]+')
+BRACE_RE = re.compile(r"\{")
+
+
+def json_key_offsets(text: str, start: int) -> dict[str, int]:
+    """Offset in `text` of every key path ("" for the root, "/States/A/Next", "/States/A/Catch/0") of the JSON value
+    starting at text[start]: the key's offset for an object member, the value's for an array element. One pass with
+    a regex tokenizer; tolerant (never raises on malformed text) and it stops at the end of that value."""
+    offsets: dict[str, int] = {}
+    frames: list[list] = []  # [path, is_object, current key (None: a key comes next) or element index]
+    for m in JSON_TOKEN_RE.finditer(text, start):
+        tok = m.group()
+        c = tok[0]
+        top = frames[-1] if frames else None
+        if c == ":":
+            continue
+        if c == ",":
+            if top is not None:
+                if top[1]:
+                    top[2] = None
+                else:
+                    top[2] += 1
+            continue
+        if c in "}]":
+            if frames:
+                frames.pop()
+            if not frames:
+                break
+            continue
+        if top is not None and top[1] and top[2] is None:
+            if c == '"':  # a key
+                key = tok[1:-1]
+                if "\\" in key:
+                    try:
+                        key = json.loads(tok)
+                    except ValueError:
+                        pass
+                top[2] = key
+                offsets[f"{top[0]}/{key}"] = m.start()
+            continue
+        if top is None:
+            path = ""
+            offsets[path] = m.start()
+        else:
+            path = f"{top[0]}/{top[2]}"
+            if not top[1]:
+                offsets[path] = m.start()
+        if c == "{":
+            frames.append([path, True, None])
+        elif c == "[":
+            frames.append([path, False, 0])
+        elif top is None:
+            break
+    return offsets
+
+
+def offset_of(offsets: dict[str, int], prefix: str, location: str) -> Optional[int]:
+    """Offset of the longest prefix of prefix + location (a diagnostic location such as "/States/A/Next") that exists
+    in the source: a missing field maps to its state, a missing state to its States object."""
+    p = prefix + ("" if location == "/" else location)
+    while True:
+        if p in offsets:
+            return offsets[p]
+        if not p:
+            return None
+        k = p.rfind("/")
+        p = p[:k] if k > 0 else ""
+
+
+class SourceMap:
+    """Where each linted definition is in the source text, as key-path offsets computed once per definition."""
+
+    MAX_CANDIDATES = 20  # "{" tried on the start line of an embedded definition
+
+    def __init__(self, text: str) -> None:
+        # placeholders replaced the way extraction does (line numbers are kept), so "${x}" values tokenize as JSON
+        self.text = substitute_placeholders(text) if ("${" in text or "%{" in text) else text
+        self.newlines: Optional[list[int]] = None
+        self.root: Optional[dict[str, int]] = None
+        self.used: set[tuple[int, str]] = set()  # embedded (chunk start, path) already matched to a definition
+
+    def line(self, pos: int) -> int:
+        if self.newlines is None:
+            self.newlines = [m.start() for m in re.finditer("\n", self.text)]
+        return bisect.bisect_left(self.newlines, pos) + 1
+
+    def root_offsets(self) -> dict[str, int]:
+        if self.root is None:
+            start = SPACES_RE.match(self.text).end()  # type: ignore[union-attr]
+            self.root = json_key_offsets(self.text, start)
+            m = JSON_TOKEN_RE.match(self.text, start)
+            if m and m.group().startswith('"') and not self.text[m.end():].strip():
+                self.root["string"] = start  # the whole input is one JSON string (terraform console output)
+        return self.root
+
+    def definition(self, label: str) -> tuple[dict[str, int], str]:
+        """(offsets, path of the definition in them) for the definition with this extraction label: "/" (the input),
+        a JSON path in the input (CloudFormation JSON), or "line N[ resource][ /path]" (embedded at line N)."""
+        root = self.root_offsets()
+        if not label.startswith("line "):
+            return root, "" if label == "/" else label
+        if "string" in root:  # lines inside a JSON-encoded string are all on the string's line
+            return {"": root["string"]}, ""
+        m = re.match(r"line (\d+)", label)
+        rest = label[m.end():] if m else ""
+        k = rest.find(" /")
+        path = rest[k + 1:] if k >= 0 else ""
+        n = int(m.group(1)) if m else 1
+        self.line(0)
+        nl = self.newlines or []
+        lo = 0 if n < 2 else nl[n - 2] + 1 if n - 2 < len(nl) else len(self.text)
+        hi = nl[n - 1] if n - 1 < len(nl) else len(self.text)
+        tries = 0
+        for b in BRACE_RE.finditer(self.text, lo, hi):
+            s = b.start()
+            if (s, path) in self.used or not JSON_OBJECT_START_RE.match(self.text, s):
+                continue
+            tries += 1
+            if tries > self.MAX_CANDIDATES:
+                break
+            offsets = json_key_offsets(self.text, s)
+            if (path in offsets) if path else ("/StartAt" in offsets and "/States" in offsets):
+                self.used.add((s, path))
+                return offsets, path
+        return {"": lo}, ""  # not found: everything on the definition's first line
+
+
+def add_lines(diags: Diagnostics, items: list[dict], smap: SourceMap, label: str) -> None:
+    """Set item["line"] and the document position of each item of one definition (locations not yet prefixed)."""
+    offsets, prefix = smap.definition(label)
+    for item in items:
+        pos = offset_of(offsets, prefix, item["location"])
+        if pos is not None:
+            item["line"] = smap.line(pos)
+            diags.positions[id(item)] = pos
+
+
+LINT_ALLOW_RE = re.compile(r"lint-allow\b[ \t]*([A-Za-z]\d{3}(?:[ \t]*,[ \t]*[A-Za-z]\d{3})*)?[ \t]*"
+                           r"(?::[ \t]*((?:(?!lint-allow\b)[\s\S])*))?")
+
+
+def lint_allows(definition: Any) -> tuple[dict[str, dict[str, str]], set[str], list[tuple[str, str]]]:
+    """"lint-allow <CODE>[,<CODE>]: <reason>" in state Comments: ({state location: {code: reason}}, every state
+    location, [(Comment location, why a directive was ignored)]). A directive without a reason suppresses nothing."""
+    allows: dict[str, dict[str, str]] = {}
+    state_locs: set[str] = set()
+    ignored: list[tuple[str, str]] = []
+    stack = [(definition.get("States") if isinstance(definition, dict) else None, "/States")]
+    while stack:
+        states, location = stack.pop()
+        if not isinstance(states, dict):
+            continue
+        for name, st in states.items():
+            if not isinstance(st, dict):
+                continue
+            loc = f"{location}/{name}"
+            state_locs.add(loc)
+            comment = st.get("Comment")
+            for m in LINT_ALLOW_RE.finditer(comment) if isinstance(comment, str) else ():
+                codes = [c.strip().upper() for c in (m.group(1) or "").split(",") if c.strip()]
+                reason = (m.group(2) or "").strip()
+                if not codes:
+                    ignored.append((f"{loc}/Comment", 'lint-allow ignored: name the codes and the reason, e.g. '
+                                    '"lint-allow S017: bounded loop, at most 10 passes"; nothing was suppressed'))
+                elif not reason:
+                    ignored.append((f"{loc}/Comment", f'"lint-allow {",".join(codes)}" has no reason, so it is ignored and '
+                                    f'nothing was suppressed; write why after a colon: "lint-allow {",".join(codes)}: <why this '
+                                    'is intended>"'))
+                else:
+                    for c in codes:
+                        if c in CODES:
+                            allows.setdefault(loc, {})[c] = reason
+                        else:
+                            ignored.append((f"{loc}/Comment", f"lint-allow: unknown code {c} (python3 lint_asl.py --list-codes "
+                                            "lists them); it suppresses nothing"))
+            for key in ("ItemProcessor", "Iterator"):
+                if isinstance(st.get(key), dict):
+                    stack.append((st[key].get("States"), f"{loc}/{key}/States"))
+            for i, b in enumerate(as_list(st.get("Branches"))):
+                if isinstance(b, dict):
+                    stack.append((b.get("States"), f"{loc}/Branches/{i}/States"))
+    return allows, state_locs, ignored
+
+
+def apply_suppressions(definition: Any, diags: Diagnostics, first: int) -> None:
+    """Move diags.items[first:] silenced by a lint-allow of their state (the innermost state containing the location;
+    a Map/Parallel's Comment does not cover the states inside it) to diags.suppressed; INFO for ignored directives."""
+    allows, state_locs, ignored = lint_allows(definition)
+    if allows:
+        kept = []
+        for item in diags.items[first:]:
+            p = item["location"]
+            while p and p not in state_locs:
+                k = p.rfind("/")
+                p = p[:k] if k > 0 else ""
+            reason = allows.get(p, {}).get(item["code"])
+            if reason is None:
+                kept.append(item)
+            else:
+                item["suppressedBy"] = reason
+                diags.suppressed.append(item)
+        diags.items[first:] = kept
+    for loc, msg in ignored:
+        diags.info("S000", loc, msg)
+
+
+SEVERITY_ORDER = {"ERROR": 0, "WARNING": 1, "INFO": 2}
+FORMATS = ("text", "json", "github", "sarif")
+GROUP_MIN = 4  # the same code and message this many times or more: text output prints it once with every location
+
+
+def document_order(diags: Diagnostics, items: list[dict]) -> list[dict]:
+    """Definition, then position in the source (state order, then field order), then severity."""
+    seq = {id(it): k for k, it in enumerate(items)}
+    return sorted(items, key=lambda it: (it.get("definition", {}).get("index", 0), diags.positions.get(id(it), -1),
+                                         SEVERITY_ORDER.get(it["severity"], 3), seq[id(it)]))
+
+
+def text_lines(name: str, items: list[dict]) -> list[str]:
+    """`<file>:<line>: SEVERITY CODE <location>: <message>`; a code+message repeated GROUP_MIN+ times is printed once."""
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    for it in items:
+        groups.setdefault((it["severity"], it["code"], it["message"]), []).append(it)
+    out = []
+    for it in items:
+        group = groups[(it["severity"], it["code"], it["message"])]
+        where = f"{name}:{it['line']}:" if it.get("line") else f"{name}:"
+        if len(group) < GROUP_MIN:
+            out.append(f"{where} {it['severity']} {it['code']} {it['location']}: {it['message']}")
+        elif group[0] is it:
+            locs = ", ".join(f"{g['location']} (line {g['line']})" if g.get("line") else g["location"] for g in group)
+            out.append(f"{where} {it['severity']} {it['code']} at {len(group)} locations: {locs}: {it['message']}")
+    return out
+
+
+def github_escape(s: str, prop: bool = False) -> str:
+    s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    return s.replace(":", "%3A").replace(",", "%2C") if prop else s
+
+
+def github_lines(name: Optional[str], items: list[dict]) -> list[str]:
+    """GitHub Actions workflow commands: ::error file=F,line=L,title=CODE::<location>: <message>."""
+    level = {"ERROR": "error", "WARNING": "warning", "INFO": "notice"}
+    out = []
+    for it in items:
+        props = ([f"file={github_escape(name, True)}"] if name else []) + \
+                ([f"line={it['line']}"] if it.get("line") else []) + [f"title={it['code']}"]
+        out.append(f"::{level.get(it['severity'], 'notice')} {','.join(props)}::"
+                   f"{github_escape(it['location'] + ': ' + it['message'])}")
+    return out
+
+
+def sarif_log(report: list[dict]) -> dict:
+    """A minimal SARIF 2.1.0 log: one run, a rule per code used (help = the --explain recipe), one result per item."""
+    level = {"ERROR": "error", "WARNING": "warning", "INFO": "note"}
+    used = sorted({it["code"] for f in report for it in f["diagnostics"]})
+    rules = [{"id": c, "shortDescription": {"text": CODES[c][1] if c in CODES else c},
+              "help": {"text": CODES[c][2] if c in CODES else ""},
+              "defaultConfiguration": {"level": level.get(CODES[c][0] if c in CODES else "ERROR", "error")}} for c in used]
+    index = {c: k for k, c in enumerate(used)}
+    results = []
+    for f in report:
+        uri = "stdin" if f["file"] == "-" else f["file"].replace("\\", "/")
+        for it in f["diagnostics"]:
+            phys: dict[str, Any] = {"artifactLocation": {"uri": uri}}
+            if it.get("line"):
+                phys["region"] = {"startLine": it["line"]}
+            results.append({"ruleId": it["code"], "ruleIndex": index[it["code"]], "level": level.get(it["severity"], "note"),
+                            "message": {"text": f"{it['location']}: {it['message']}"},
+                            "locations": [{"physicalLocation": phys,
+                                           "logicalLocations": [{"fullyQualifiedName": it["location"]}]}]})
+    return {"$schema": "https://json.schemastore.org/sarif-2.1.0.json", "version": "2.1.0",
+            "runs": [{"tool": {"driver": {"name": "lint_asl", "rules": rules}}, "results": results}]}
+
+
+def explain_code(code: str) -> str:
+    severity, title, recipe = CODES[code]
+    return f"{code} ({severity}): {title}\n{recipe}"
+
+
 def lint_text(text: str, jsonata=None, execution_type: str = "STANDARD",
               filename: Optional[str] = None) -> tuple[Diagnostics, int]:
     diags = Diagnostics()
     _similar_cache["budget"] = HINT_COMPARE_BUDGET  # V001 "did you mean" comparisons: one budget per file
     _similar_cache["index_left"] = 4 * MAX_INDEXED_VARS  # names put in the deletion index, per file
+    _suggest_budget["left"] = SUGGEST_BUDGET
     text = text.lstrip("﻿")
     problems: list = []
     labels: list[str] = []
@@ -3123,8 +3680,13 @@ def lint_text(text: str, jsonata=None, execution_type: str = "STANDARD",
         diags.add(p[0], "S000", "/", p[1]) if isinstance(p, tuple) else diags.error("S000", "/", p)
     if not defs and not problems:
         diags.error("S000", "/", nothing_found_message(text, filename))
+    for item in diags.items:  # input problems: the line their message names ("invalid JSON: ... at line 3 column 5")
+        m = re.search(r"\bline (\d+)", item["message"])
+        item["line"] = int(m.group(1)) if m else None
+    smap: Optional[SourceMap] = None
     for i, (definition, note) in enumerate(defs):
         first = len(diags.items)
+        first_suppressed = len(diags.suppressed)
         if note:
             diags.info("S000", "/", note)
         try:
@@ -3135,9 +3697,15 @@ def lint_text(text: str, jsonata=None, execution_type: str = "STANDARD",
             why = ("the definition is nested too deeply" if isinstance(ex, RecursionError) else
                    "the definition probably has a field of the wrong type - fix the other errors first, then re-run")
             diags.error("S000", "/", f"linter internal error{where} ({type(ex).__name__}: {ex}); {why}")
+        label = labels[i] if i < len(labels) else "/"
+        try:  # suppressions and line numbers only annotate the result: they must never turn a lint into a crash
+            apply_suppressions(definition, diags, first)
+            smap = smap or SourceMap(text)
+            add_lines(diags, diags.items[first:] + diags.suppressed[first_suppressed:], smap, label)
+        except (Exception, RecursionError):  # noqa: BLE001
+            pass
         if len(defs) > 1:  # say which definition each diagnostic is about: "[2:/Resources/SM2/Properties/Definition] /States/A"
-            label = labels[i] if i < len(labels) else "/"
-            for item in diags.items[first:]:
+            for item in diags.items[first:] + diags.suppressed[first_suppressed:]:
                 item["definition"] = {"index": i + 1, "label": label, "path": item["location"]}  # type: ignore[assignment]
                 item["location"] = f"[{i + 1}:{label}] {item['location']}"
     return diags, len(defs)
@@ -3198,33 +3766,61 @@ def expand_globs(files: list[str]) -> list[str]:
     return out
 
 
+def build_arg_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="lint_asl.py", allow_abbrev=False,
+        description="Static checks for AWS Step Functions state machine definitions (JSONata and JSONPath).",
+        epilog="Exit code 0 clean, 1 errors (or warnings with --strict), 2 nothing linted or usage error, 3 linter "
+               'internal error. Silence one diagnostic with "lint-allow <CODE>: <reason>" in the Comment of its state.')
+    p.add_argument("files", nargs="*", metavar="FILE",
+                   help='definition JSON, a file that embeds one (Terraform, CloudFormation), a quoted glob ("sfn/*.json"), or - for stdin')
+    p.add_argument("--format", choices=FORMATS, default="text", help="output format (default: text)")
+    p.add_argument("--json", action="store_true", help="same as --format json")
+    p.add_argument("--type", default="STANDARD", metavar="STANDARD|EXPRESS",
+                   help="workflow type; EXPRESS also enforces Express limits (default: STANDARD)")
+    p.add_argument("--strict", action="store_true", help="exit 1 when there is any WARNING too")
+    p.add_argument("--quiet", action="store_true", help="hide INFO diagnostics")
+    p.add_argument("--show-suppressed", action="store_true", help='list the diagnostics silenced by "lint-allow" comments')
+    p.add_argument("--list-codes", action="store_true", help="list every diagnostic code and exit")
+    p.add_argument("--explain", metavar="CODE", help="explain how to fix one code (e.g. --explain S017) and exit")
+    return p
+
+
 def main(argv: list[str]) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:  # piped output on Windows defaults to the ANSI code page and crashes on non-ASCII state names
             stream.reconfigure(encoding="utf-8", errors="backslashreplace")  # type: ignore[union-attr]
         except (AttributeError, ValueError, OSError):
             pass
-    args = argv[1:]
-    exec_type = "STANDARD"
-    while "--type" in args:
-        i = args.index("--type")
-        exec_type = args[i + 1].upper() if i + 1 < len(args) else ""
-        args = args[:i] + args[i + 2:]
-    for a in [a for a in args if a.startswith("--type=")]:
-        exec_type = a.split("=", 1)[1].upper()
-        args.remove(a)
+    parser = build_arg_parser()
+    try:
+        args = parser.parse_intermixed_args(argv[1:])
+    except SystemExit as ex:  # unknown flag or bad value: argparse printed the usage and the error (--help: exit 0)
+        return ex.code if isinstance(ex.code, int) else 2
+    if args.list_codes:
+        for code, (severity, title, _recipe) in CODES.items():
+            print(f"{code} {severity:<7} {title}")
+        return 0
+    if args.explain is not None:
+        code = args.explain.strip().upper()
+        if code not in CODES:
+            print(f"error: unknown code {args.explain!r}; python3 lint_asl.py --list-codes lists every code", file=sys.stderr)
+            return 2
+        print(explain_code(code))
+        return 0
+    exec_type = args.type.upper()
     if exec_type not in ("STANDARD", "EXPRESS"):
         print("error: --type must be STANDARD or EXPRESS", file=sys.stderr)
         return 2
-    as_json = "--json" in args
-    files = expand_globs([a for a in args if not a.startswith("--")])
+    fmt = "json" if args.json else args.format
+    files = expand_globs(args.files)
     if not files:
-        print("usage: python3 lint_asl.py [--json] [--type STANDARD|EXPRESS] <definition.json|file-with-embedded-definition|->", file=sys.stderr)
+        parser.print_usage(sys.stderr)
+        print("error: no input: pass a definition file, a quoted glob, or - for stdin", file=sys.stderr)
         return 2
     jsonata = load_jsonata()
     exit_code = 0
     report = []
-    order = {"ERROR": 0, "WARNING": 1, "INFO": 2}
     for f in files:
         text, read_error = read_input(f)
         if text is None:
@@ -3234,24 +3830,37 @@ def main(argv: list[str]) -> int:
             diags.error("S000", "/", "no files match this pattern" if pattern else str(read_error))
         else:
             diags, count = lint_text(text, jsonata, exec_type, None if f == "-" else f)
-        report.append({"file": f, "diagnostics": diags.items})
-        if diags.errors:
+        if diags.errors or (args.strict and diags.warnings):
             exit_code = max(exit_code, 1)
         if count == 0:
             exit_code = max(exit_code, 2)
         if getattr(diags, "crashed", False):
             exit_code = 3
-        if not as_json:
-            items = sorted(diags.items, key=lambda x: (order[x["severity"]], x.get("definition", {}).get("index", 0), x["location"]))
+        items = document_order(diags, [it for it in diags.items if not (args.quiet and it["severity"] == "INFO")])
+        report.append({"file": f, "diagnostics": items, "suppressed": document_order(diags, diags.suppressed)})
+        if fmt == "github":
+            for line in github_lines(None if f == "-" else f, items):
+                print(line)
+        elif fmt == "text":
+            name = "<stdin>" if f == "-" else f
             print(f"== {f}{f' ({count} definitions)' if count > 1 else ''}")
-            for it in items:
-                print(f"{it['severity']:<7} {it['code']} {it['location']}: {it['message']}")
+            for line in text_lines(name, items):
+                print(line)
             note = "" if jsonata else " [jsonata-python not installed: expression syntax not parsed; pip install jsonata-python]"
             if count == 0:
                 note = " - nothing was linted"
             print(f"-- {diags.errors} error(s), {diags.warnings} warning(s){note}")
-    if as_json:
+            if diags.suppressed:
+                if args.show_suppressed:
+                    for it in document_order(diags, diags.suppressed):
+                        where = f"{name}:{it['line']}:" if it.get("line") else f"{name}:"
+                        print(f"{where} suppressed {it['severity']} {it['code']} {it['location']}: {it['message']} "
+                              f"[lint-allow: {it.get('suppressedBy', '')}]")
+                print(f"-- {len(diags.suppressed)} suppressed" + ("" if args.show_suppressed else " (--show-suppressed lists them)"))
+    if fmt == "json":
         print(json.dumps({"jsonataParser": jsonata is not None, "files": report}, indent=2))
+    elif fmt == "sarif":
+        print(json.dumps(sarif_log(report), indent=2))
     return exit_code
 
 

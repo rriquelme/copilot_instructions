@@ -1,0 +1,21 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Get",
+  "States": {
+    "Get": {
+      "Type": "Pass",
+      "Next": "ChargeOrdr"
+    },
+    "ChargeOrder": {
+      "Type": "Pass",
+      "Next": "Ship"
+    },
+    "Ship": {
+      "Type": "Pass",
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}
