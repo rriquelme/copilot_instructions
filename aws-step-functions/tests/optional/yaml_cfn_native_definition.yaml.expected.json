@@ -1,7 +1,6 @@
 {"requires": ["yaml"], "type": "STANDARD", "diagnostics": [
   ["ERROR", "S002", "[1:/Resources/OrdersMachine/Properties/Definition] /States/Notify/Next"],
   ["ERROR", "S002", "[3:/Resources/StringMachine/Properties/DefinitionString] /States/A/Next"],
-  ["ERROR", "S003", "[1:/Resources/OrdersMachine/Properties/Definition] /States/Notify"],
   ["ERROR", "S003", "[1:/Resources/OrdersMachine/Properties/Definition] /States/Wait"],
   ["ERROR", "S009", "[1:/Resources/OrdersMachine/Properties/Definition] /States/Load/Nxt"],
   ["INFO", "J000", "[2:/Resources/LegacyMachine/Properties/Definition] /QueryLanguage"],

@@ -3133,7 +3133,8 @@ class Scope:
                 if res.endswith(".waitForTaskToken"):
                     s = json.dumps(st.get("Arguments", st.get("Parameters", {})))
                     if "Task.Token" not in s:
-                        d.error("S015", loc, '.waitForTaskToken tasks must pass the token: "{% $states.context.Task.Token %}" (JSONata) or "$$.Task.Token" (JSONPath) inside Arguments/Parameters')
+                        d.error("S015", loc, '.waitForTaskToken task never sends its task token, so nothing can resume it; pass the token in '
+                                'Arguments/Parameters, e.g. "TaskToken": "{% $states.context.Task.Token %}" (JSONata) or "TaskToken.$": "$$.Task.Token" (JSONPath)')
                     if not any(f in st for f in ("HeartbeatSeconds", "TimeoutSeconds", "HeartbeatSecondsPath", "TimeoutSecondsPath")):
                         d.warn("P002", loc, ".waitForTaskToken without HeartbeatSeconds or TimeoutSeconds can wait up to one year; "
                                'set "TimeoutSeconds": <seconds>' + ("" if is_jsonata else ' (or "TimeoutSecondsPath": "$.<field>" - never both)'))

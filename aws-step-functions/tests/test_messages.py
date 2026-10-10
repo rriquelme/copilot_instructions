@@ -26,7 +26,7 @@ SUGGESTIONS = [
     ("s040_catch_shape.json", "S040", "/States/A/Catch/0/Nxt", 'rename it to "Next"'),
     ("s040_catch_shape.json", "S040", "/States/A/Catch/2/Outptu", 'did you mean "Output"?'),
     ("s041_error_equals.json", "S041", "/States/A/Retry/2/ErrorEquals", 'did you mean "States.Timeout"?'),
-    ("s006_choice_structure.json", "S006", "/States/Pick/Choices/0/Nxet", 'did you mean "Next"?'),
+    ("s006_choice_structure_docs.json", "S006", "/States/Pick/Choices/0/Nxet", 'did you mean "Next"?'),
     ("s046_top_level_fields.json", "S046", "/startat", 'did you mean "StartAt"?'),
     ("s046_top_level_fields.json", "S046", "/Timeout", "allowed: Comment, QueryLanguage, StartAt"),
     ("s009_field_suggestions.json", "S009", "/States/A/Resouce", 'did you mean "Resource"?'),
