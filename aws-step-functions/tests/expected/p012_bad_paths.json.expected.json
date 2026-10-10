@@ -13,5 +13,5 @@
   ["ERROR", "P012", "/States/T/ResultPath"],
   ["ERROR", "P012", "/States/W/SecondsPath"],
   ["INFO", "J000", "/QueryLanguage"],
-  ["INFO", "P005", "/States/T"]
+  ["WARNING", "P005", "/States/T"]
 ]}

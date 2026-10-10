@@ -1,4 +1,4 @@
 {"type": "STANDARD", "diagnostics": [
-  ["INFO", "P005", "/States/NoRetry"],
-  ["INFO", "P005", "/States/WrongRetry"]
+  ["WARNING", "P005", "/States/NoRetry"],
+  ["WARNING", "P005", "/States/WrongRetry"]
 ]}

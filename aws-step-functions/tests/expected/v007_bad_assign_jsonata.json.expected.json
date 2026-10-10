@@ -6,6 +6,6 @@
   ["ERROR", "V007", "/States/A/Assign/states"],
   ["ERROR", "V007", "/States/A/Catch/0/Assign/$err"],
   ["ERROR", "V007", "/States/C/Choices/0/Assign/route-name"],
-  ["INFO", "P005", "/States/A"],
+  ["WARNING", "P005", "/States/A"],
   ["WARNING", "V006", "/States/A/Assign/ok_name"]
 ]}

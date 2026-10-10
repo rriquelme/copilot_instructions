@@ -390,9 +390,11 @@ PAGINATION_RE = re.compile(r"token|marker|cursor|next_?page|last_?evaluated_?key
 LAMBDA_TRANSIENT_ERRORS = {"Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException",
                            "Lambda.TooManyRequestsException", "Lambda.ClientExecutionTimeoutException",
                            "States.ALL", "States.TaskFailed"}
-LAMBDA_RETRY_SNIPPET = ('{"ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", '
-                        '"Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2, '
-                        '"JitterStrategy": "FULL"}')
+# Same retrier as reference/patterns.md: the AWS best-practice list plus throttling, with jitter.
+# https://docs.aws.amazon.com/step-functions/latest/dg/sfn-best-practices.html#bp-lambda-serviceexception
+LAMBDA_RETRY_SNIPPET = ('{"ErrorEquals": ["Lambda.ClientExecutionTimeoutException", "Lambda.ServiceException", '
+                        '"Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"], '
+                        '"IntervalSeconds": 2, "MaxAttempts": 6, "BackoffRate": 2, "JitterStrategy": "FULL"}')
 
 # ---------------------------------------------------------------------------
 # Diagnostics
@@ -2583,8 +2585,8 @@ class Scope:
                         isinstance(r, dict) and isinstance(r.get("ErrorEquals"), list) and LAMBDA_TRANSIENT_ERRORS & set(
                             e for e in r["ErrorEquals"] if isinstance(e, str)) for r in rl)
                     if not covered and (rl is None or isinstance(rl, list)):
-                        d.info("P005", loc, "Lambda tasks should retry transient Lambda service errors; add this as the first "
-                               f'"Retry" entry: {LAMBDA_RETRY_SNIPPET}')
+                        d.warn("P005", loc, "Lambda task has no Retry for transient Lambda service errors (throttling, 5xx), so one "
+                               f'blip fails the state; add this as the first "Retry" entry: {LAMBDA_RETRY_SNIPPET}')
 
         retry = st.get("Retry")
         if isinstance(retry, list):
