@@ -1,0 +1,25 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "M",
+ "States": {
+  "M": {
+   "Type": "Map",
+   "ItemProcessor": {
+    "ProcessorConfig": {
+     "Mode": "DISTRIBUTED",
+     "ExecutionType": "STANDARD"
+    },
+    "StartAt": "P",
+    "States": {
+     "P": {
+      "Type": "Pass",
+      "End": true
+     }
+    }
+   },
+   "Items": "{% $states.input.items %}",
+   "End": true,
+   "ToleratedFailureCount": -1
+  }
+ }
+}

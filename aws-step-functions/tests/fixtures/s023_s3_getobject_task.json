@@ -1,0 +1,15 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "Q",
+ "States": {
+  "Q": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::s3:getObject",
+   "Arguments": {
+    "Bucket": "b",
+    "Key": "k"
+   },
+   "End": true
+  }
+ }
+}

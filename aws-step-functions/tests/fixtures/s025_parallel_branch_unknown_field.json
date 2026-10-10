@@ -1,0 +1,22 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "P",
+ "States": {
+  "P": {
+   "Type": "Parallel",
+   "Branches": [
+    {
+     "StartAt": "A",
+     "States": {
+      "A": {
+       "Type": "Pass",
+       "End": true
+      }
+     },
+     "Next": "X"
+    }
+   ],
+   "End": true
+  }
+ }
+}

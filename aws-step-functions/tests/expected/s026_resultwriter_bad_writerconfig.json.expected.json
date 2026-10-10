@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S026", "/States/M/ResultWriter/WriterConfig/OutputType"],
+  ["ERROR", "S026", "/States/M/ResultWriter/WriterConfig/Transformation"]
+]}

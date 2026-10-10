@@ -1,0 +1,31 @@
+{
+  "Comment": "S025: Map-level and S3 fields put one level too deep / too shallow, a JSONPath-only *Path in JSONata",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Process",
+  "States": {
+    "Process": {
+      "Type": "Map",
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "InputType": "JSON",
+        "Bucket": "orders-bucket",
+        "Arguments": {"Bucket": "orders-bucket", "Key": "orders.json"},
+        "ReaderConfig": {"InputType": "JSON", "MaxItemsPath": "$.limit"}
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "MaxConcurrency": 100,
+        "StartAt": "Handle",
+        "States": {"Handle": {"Type": "Pass", "End": true}}
+      },
+      "ItemBatcher": {"MaxItemsPerBatch": 10, "MaxItemsPerBatchPath": "$.n"},
+      "ResultWriter": {
+        "Resource": "arn:aws:states:::s3:putObject",
+        "Arguments": {"Bucket": "results-bucket", "Prefix": "runs"},
+        "Transformation": "COMPACT",
+        "WriterConfig": {"OutputType": "JSON", "Format": "JSON"}
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Fan",
+  "States": {
+    "Fan": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "Put",
+          "States": {
+            "Put": {"Type": "Succeed"},
+            "Put": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::dynamodb:putItem",
+              "Arguments": {
+                "TableName": "orders",
+                "Item": {"pk": {"S": "{% $states.input.id %}"}, "status": {"S": "NEW"}, "status": {"S": "OPEN"}}
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "End": true
+    }
+  }
+}

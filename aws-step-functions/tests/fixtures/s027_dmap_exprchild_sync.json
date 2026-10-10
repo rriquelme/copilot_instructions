@@ -1,0 +1,28 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "M",
+ "States": {
+  "M": {
+   "Type": "Map",
+   "ItemProcessor": {
+    "ProcessorConfig": {
+     "Mode": "DISTRIBUTED",
+     "ExecutionType": "EXPRESS"
+    },
+    "StartAt": "P",
+    "States": {
+     "P": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Arguments": {
+       "JobName": "j"
+      },
+      "End": true
+     }
+    }
+   },
+   "Items": "{% $states.input.items %}",
+   "End": true
+  }
+ }
+}

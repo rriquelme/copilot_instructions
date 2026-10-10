@@ -1,0 +1,6 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S027", "/States/Fan/ItemProcessor/States/Activity/Resource"],
+  ["ERROR", "S027", "/States/Fan/ItemProcessor/States/Nested/ItemProcessor/ProcessorConfig/Mode"],
+  ["WARNING", "S027", "/States/Fan/ItemProcessor/States/Activity/TimeoutSeconds"],
+  ["WARNING", "S027", "/States/Fan/ItemProcessor/States/Inner/ItemProcessor/States/Both/Branches/0/States/Pause/Seconds"]
+]}
