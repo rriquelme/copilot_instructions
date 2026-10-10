@@ -1,0 +1,14 @@
+{
+  "StartAt": "Shape",
+  "States": {
+    "Shape": {
+      "Type": "Pass",
+      "Parameters": {
+        "count.$": 5,
+        "name.$": "literal text",
+        "ok.$": "$.x"
+      },
+      "End": true
+    }
+  }
+}

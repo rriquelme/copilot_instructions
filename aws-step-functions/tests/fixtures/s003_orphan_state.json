@@ -1,0 +1,17 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Next": "C"
+    },
+    "B": {
+      "Type": "Pass",
+      "Next": "C"
+    },
+    "C": {
+      "Type": "Succeed"
+    }
+  }
+}

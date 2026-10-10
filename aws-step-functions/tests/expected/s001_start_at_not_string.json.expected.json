@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S001", "/StartAt"],
+  ["ERROR", "S003", "/States/First"]
+]}

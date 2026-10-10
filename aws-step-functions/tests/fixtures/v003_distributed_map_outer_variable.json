@@ -1,0 +1,32 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Init",
+  "States": {
+    "Init": {
+      "Type": "Pass",
+      "Assign": {
+        "orderId": "{% $states.input.id %}"
+      },
+      "Next": "Fan out"
+    },
+    "Fan out": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "STANDARD"
+        },
+        "StartAt": "Work",
+        "States": {
+          "Work": {
+            "Type": "Pass",
+            "Output": "{% $orderId %}",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Empty",
+  "States": {
+    "Empty": {
+      "Type": "Choice",
+      "Choices": [],
+      "Default": "Rules"
+    },
+    "Rules": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Condition": "{% true %}"
+        },
+        {
+          "Next": "Done"
+        },
+        "not a rule",
+        {
+          "Condition": "{% false %}",
+          "Next": "Done",
+          "Varible": "$.x"
+        }
+      ]
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}

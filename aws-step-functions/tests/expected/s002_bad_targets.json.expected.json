@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "/States/Loop/ItemProcessor/States/Inner/Next"],
+  ["ERROR", "S002", "/States/Loop/Next"],
+  ["ERROR", "S003", "/States/Done"]
+], "contains": {
+  "S002@/States/Loop/ItemProcessor/States/Inner/Next": "transitions cannot cross Map/Parallel scope boundaries"
+}}

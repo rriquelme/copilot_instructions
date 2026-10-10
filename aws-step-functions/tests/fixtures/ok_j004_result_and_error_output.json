@@ -1,0 +1,34 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Call",
+  "States": {
+    "Call": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:listBuckets",
+      "Arguments": {
+        "In": "{% $states.input %}"
+      },
+      "Output": "{% $states.result %}",
+      "Assign": {
+        "last": "{% $states.result %}"
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Output": "{% $states.errorOutput %}",
+          "Assign": {
+            "last": "{% $states.errorOutput %}"
+          },
+          "Next": "Done"
+        }
+      ],
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed",
+      "Output": "{% $last %}"
+    }
+  }
+}

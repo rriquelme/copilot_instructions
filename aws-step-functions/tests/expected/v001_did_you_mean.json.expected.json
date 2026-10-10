@@ -3,4 +3,7 @@
   ["ERROR", "V001", "/States/B/Output/s"],
   ["ERROR", "V001", "/States/B/Output/t"],
   ["ERROR", "V001", "/States/B/Output/z"]
-]}
+], "contains": {
+  "V001@/States/B/Output/t": "did you mean $total?",
+  "V001@/States/B/Output/o": "did you mean $OrderId?"
+}}

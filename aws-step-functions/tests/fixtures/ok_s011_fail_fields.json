@@ -1,0 +1,10 @@
+{
+  "StartAt": "Fail",
+  "States": {
+    "Fail": {
+      "Type": "Fail",
+      "ErrorPath": "$.error",
+      "Cause": "something broke"
+    }
+  }
+}

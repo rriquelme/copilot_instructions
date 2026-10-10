@@ -1,0 +1,17 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Wait for approval",
+  "States": {
+    "Wait for approval": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "Arguments": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q",
+        "MessageBody": {
+          "token": "{% $states.context.Task.Token %}"
+        }
+      },
+      "End": true
+    }
+  }
+}

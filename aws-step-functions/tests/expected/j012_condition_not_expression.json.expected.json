@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J012", "/States/Route/Choices/0/Condition"],
+  ["ERROR", "J012", "/States/Route/Choices/1/Condition"]
+]}

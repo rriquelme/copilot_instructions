@@ -1,0 +1,16 @@
+{
+  "StartAt": "Shape",
+  "States": {
+    "Shape": {
+      "Type": "Pass",
+      "Parameters": {
+        "count": 5,
+        "name": "literal text",
+        "ok.$": "$.x",
+        "ctx.$": "$$.Execution.Id",
+        "fmt.$": "States.Format('id {}', $.id)"
+      },
+      "End": true
+    }
+  }
+}

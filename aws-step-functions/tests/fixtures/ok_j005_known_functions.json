@@ -1,0 +1,15 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Shape",
+  "States": {
+    "Shape": {
+      "Type": "Pass",
+      "Output": {
+        "n": "{% $number($states.input.n) %}",
+        "u": "{% $uuid() %}",
+        "p": "{% $partition($states.input.items, 2) %}"
+      },
+      "End": true
+    }
+  }
+}

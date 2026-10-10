@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J002", "/States/Call/Arguments/Bucket.$"],
+  ["ERROR", "J002", "/States/Call/Arguments/Nested/Key.$"]
+]}

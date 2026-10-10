@@ -1,0 +1,18 @@
+{
+  "StartAt": "Route",
+  "States": {
+    "Route": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "StringEquals": "x",
+          "Next": "Done"
+        }
+      ],
+      "Default": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}

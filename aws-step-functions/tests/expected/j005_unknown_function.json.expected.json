@@ -1,0 +1,6 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "J005", "/States/Shape/Output/n"],
+  ["ERROR", "J005", "/States/Shape/Output/s"]
+], "contains": {
+  "J005@/States/Shape/Output/n": "use $number(x)"
+}}

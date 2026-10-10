@@ -1,0 +1,13 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Shape",
+  "States": {
+    "Shape": {
+      "Type": "Pass",
+      "Output": {
+        "msg": "{% States.Format('Hello {}', $states.input.name) %}"
+      },
+      "End": true
+    }
+  }
+}

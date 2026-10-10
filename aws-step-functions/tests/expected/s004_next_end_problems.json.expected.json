@@ -1,0 +1,6 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S004", "/States/Done/End"],
+  ["ERROR", "S004", "/States/End not true/End"],
+  ["ERROR", "S004", "/States/No transition"],
+  ["ERROR", "S004", "/States/Route/Next"]
+]}

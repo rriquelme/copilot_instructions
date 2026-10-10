@@ -1,0 +1,28 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "A",
+  "States": {
+    "A": {
+      "Type": "Pass",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ]
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "B"
+        }
+      ],
+      "Next": "B"
+    },
+    "B": {
+      "Type": "Succeed"
+    }
+  }
+}
