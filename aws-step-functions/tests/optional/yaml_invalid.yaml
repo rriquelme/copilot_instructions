@@ -1,0 +1,10 @@
+Resources:
+  SM:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      Definition:
+        StartAt: A
+        States:
+          A:
+            Type: Pass
+           End: true

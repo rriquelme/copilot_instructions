@@ -1,0 +1,5 @@
+{"requires": ["yaml"], "type": "STANDARD", "diagnostics": [
+  ["ERROR", "S000", "/"]
+], "contains": {
+  "S000@/": "no state machine definition found"
+}}

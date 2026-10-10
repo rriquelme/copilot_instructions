@@ -1,0 +1,5 @@
+{"type": "STANDARD", "diagnostics": [
+  ["INFO", "S000", "/"]
+], "contains": {
+  "S000@/": "converted the Terraform jsonencode({...}) at line 12"
+}}

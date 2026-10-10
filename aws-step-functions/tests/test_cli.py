@@ -27,6 +27,8 @@ UNICODE = '{"QueryLanguage": "JSONata", "StartAt": "注文", "States": {"注文"
 INVALID_NESTED = ('{"QueryLanguage":"JSONata","StartAt":"M","States":{"M":{"Type":"Map","Items":"{% $states.input %}",'
                   '"ItemProcessor":{"StartAt":"S","States":{"S":{"Type":"Succeed"}}},"Next":"X",}}}')
 HCL = 'resource "aws_sfn_state_machine" "a" {\n  definition = jsonencode({\n    StartAt = "A"\n    States = {}\n  })\n}\n'
+HCL_FOR = ('resource "aws_sfn_state_machine" "a" {\n  definition = jsonencode({\n    StartAt = "A"\n'
+           '    States = { for s in var.states : s.name => s.body }\n  })\n}\n')
 
 failures = 0
 
@@ -59,6 +61,7 @@ def main() -> int:
         (d / "binary.json").write_bytes(b'{"a": "\xff\x80\x81"}')
         (d / "invalid.json").write_text(INVALID_NESTED, encoding="utf-8")
         (d / "main.tf").write_text(HCL, encoding="utf-8")
+        (d / "for.tf").write_text(HCL_FOR, encoding="utf-8")
         (d / "sub").mkdir()
 
         code, out = run(["clean.json"], cwd=tmp)
@@ -98,7 +101,11 @@ def main() -> int:
         check("invalid JSON -> S000 with line/column, exit 2 (not a clean run)",
               code == 2 and "S000" in out and "line 1 column" in out, out)
         code, out = run(["main.tf"], cwd=tmp)
-        check("Terraform jsonencode -> render hint, exit 2", code == 2 and "terraform show -json" in out, out)
+        check("Terraform jsonencode -> converted from HCL and linted, exit 1",
+              code == 1 and "converted the Terraform jsonencode" in out and "S001" in out, out)
+        code, out = run(["for.tf"], cwd=tmp)
+        check("Terraform jsonencode with a for expression -> render hint, exit 2",
+              code == 2 and "terraform show -json" in out and "for expression" in out, out)
         code, out = run(["--json", "bad.json", "missing.json"], cwd=tmp)
         try:
             data = json.loads(out)

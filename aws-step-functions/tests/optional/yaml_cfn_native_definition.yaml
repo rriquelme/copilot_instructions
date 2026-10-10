@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  OrdersMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      RoleArn: !GetAtt Role.Arn
+      Definition:
+        QueryLanguage: JSONata
+        StartAt: Load
+        States:
+          Load:
+            Type: Task
+            Resource: arn:aws:states:::dynamodb:getItem
+            Arguments:
+              TableName: !Ref OrdersTable
+              Key:
+                id:
+                  S: "{% $states.input.id %}"
+            Output: "{% $states.result.Item %}"
+            Nxt: Wait
+            End: true
+          Wait:
+            Type: Wait
+            Timestamp: 2025-01-31T10:00:00Z
+            Next: Notify
+          Notify:
+            Type: Task
+            Resource: !Sub arn:${AWS::Partition}:states:::sns:publish
+            Arguments:
+              TopicArn: !Ref Topic
+              Message: "{% $string($states.input) %}"
+            Next: Finish
+  LegacyMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      DefinitionSubstitutions:
+        FnArn: !GetAtt Fn.Arn
+      Definition:
+        StartAt: Call
+        States:
+          Call:
+            Type: Task
+            Resource: ${FnArn}
+            ResultPath: $.result
+            Next: Done
+          Done:
+            Type: Succeed
+  StringMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      DefinitionString: !Sub |
+        {
+          "QueryLanguage": "JSONata",
+          "StartAt": "A",
+          "States": { "A": { "Type": "Pass", "Next": "B" } }
+        }

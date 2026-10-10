@@ -1,0 +1,7 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "/States/A/Next"],
+  ["INFO", "S000", "/"],
+  ["INFO", "S000", "/"]
+], "contains": {
+  "S000@/": "not linted: the Terraform jsonencode({...}) at line 14"
+}}

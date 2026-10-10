@@ -1,0 +1,5 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S000", "/"]
+], "contains": {
+  "S000@/": "cannot convert (for expression at line 7)"
+}}

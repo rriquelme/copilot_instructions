@@ -1,0 +1,26 @@
+service: orders
+provider:
+  name: aws
+stepFunctions:
+  stateMachines:
+    orders:
+      definition:
+        QueryLanguage: JSONata
+        StartAt: Call
+        States:
+          Call:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Arguments:
+              FunctionName:
+                Fn::GetAtt: [price, Arn]
+              Payload: "{% $states.input %}"
+            Output: "{% $states.result.Payload %}"
+            Retry:
+              - ErrorEquals: [Lambda.ServiceException, Lambda.AWSLambdaException, Lambda.SdkClientException, Lambda.TooManyRequestsException]
+                IntervalSeconds: 2
+                MaxAttempts: 3
+                BackoffRate: 2
+            Next: Done
+          Done:
+            Type: Succeed

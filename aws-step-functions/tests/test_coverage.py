@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """test_coverage.py - every diagnostic code the linter can emit must be pinned by at least one golden fixture.
 
-Collects every code literal in scripts/lint_asl.py (regex [SJVP]\\d{3}) and every code that appears in an expected
+Collects every code literal in scripts/lint_asl.py (regex [SJVP]\\d{3} inside quotes) and every code that appears in an expected
 file (tests/expected/*.expected.json, plus tests/optional/*.expected.json for codes that need an optional parser,
 such as J006). Fails, listing the missing codes, when a code is never expected anywhere: add a fixture that fires it
 (tests/fixtures/<code>_<what>.json) and one that stays clean (ok_<what>.json), then
@@ -18,7 +18,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LINTER = HERE.parent / "scripts" / "lint_asl.py"
-CODE_RE = re.compile(r"\b[SJVP]\d{3}\b")
+CODE_RE = re.compile(r"""["']([SJVP]\d{3})["']""")  # quoted literals only, so a "# noqa: S506" comment is not a code
 
 
 def linter_codes() -> set[str]:
