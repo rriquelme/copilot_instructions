@@ -1,0 +1,21 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "M",
+ "States": {
+  "M": {
+   "Type": "Map",
+   "Items": "{% $states.input.x %}",
+   "ItemProcessor": {
+    "StartAt": "P",
+    "States": {
+     "P": {
+      "Type": "Pass",
+      "End": true
+     }
+    },
+    "Mode": "INLINE"
+   },
+   "End": true
+  }
+ }
+}

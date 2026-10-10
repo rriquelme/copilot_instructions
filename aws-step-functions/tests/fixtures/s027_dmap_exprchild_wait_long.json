@@ -1,0 +1,25 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "M",
+ "States": {
+  "M": {
+   "Type": "Map",
+   "ItemProcessor": {
+    "ProcessorConfig": {
+     "Mode": "DISTRIBUTED",
+     "ExecutionType": "EXPRESS"
+    },
+    "StartAt": "P",
+    "States": {
+     "P": {
+      "Type": "Wait",
+      "Seconds": 3600,
+      "End": true
+     }
+    }
+   },
+   "Items": "{% $states.input.items %}",
+   "End": true
+  }
+ }
+}

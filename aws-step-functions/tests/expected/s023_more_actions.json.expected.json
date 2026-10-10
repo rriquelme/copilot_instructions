@@ -1,0 +1,8 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S023", "/States/ApiGet/Resource"],
+  ["ERROR", "S023", "/States/Callback/Resource"],
+  ["ERROR", "S023", "/States/CaseTypo/Resource"],
+  ["ERROR", "S023", "/States/ChinaBatch/Resource"],
+  ["ERROR", "S023", "/States/Converse/Resource"],
+  ["INFO", "J000", "/QueryLanguage"]
+]}

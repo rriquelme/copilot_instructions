@@ -1,0 +1,18 @@
+{
+  "QueryLanguage": "JSONata",
+  "StartAt": "Describe",
+  "States": {
+    "Describe": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:stepfunctions:describeExecution",
+      "Arguments": {"ExecutionArn": "{% $states.input.arn %}"},
+      "Next": "Log"
+    },
+    "Log": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:logs:putLogEvents",
+      "Arguments": {"LogGroupName": "g", "LogStreamName": "s", "LogEvents": [{"Message": "done", "Timestamp": "{% $toMillis($now()) %}"}]},
+      "End": true
+    }
+  }
+}

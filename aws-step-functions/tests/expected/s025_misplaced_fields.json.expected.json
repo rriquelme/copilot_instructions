@@ -1,0 +1,9 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S025", "/States/Process/ItemBatcher/MaxItemsPerBatchPath"],
+  ["ERROR", "S025", "/States/Process/ItemProcessor/MaxConcurrency"],
+  ["ERROR", "S025", "/States/Process/ItemReader/Bucket"],
+  ["ERROR", "S025", "/States/Process/ItemReader/InputType"],
+  ["ERROR", "S025", "/States/Process/ItemReader/ReaderConfig/MaxItemsPath"],
+  ["ERROR", "S025", "/States/Process/ResultWriter/Transformation"],
+  ["ERROR", "S025", "/States/Process/ResultWriter/WriterConfig/Format"]
+]}

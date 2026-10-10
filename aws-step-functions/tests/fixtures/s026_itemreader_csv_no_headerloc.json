@@ -1,0 +1,33 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "M",
+ "States": {
+  "M": {
+   "Type": "Map",
+   "ItemProcessor": {
+    "ProcessorConfig": {
+     "Mode": "DISTRIBUTED",
+     "ExecutionType": "STANDARD"
+    },
+    "StartAt": "P",
+    "States": {
+     "P": {
+      "Type": "Pass",
+      "End": true
+     }
+    }
+   },
+   "End": true,
+   "ItemReader": {
+    "Resource": "arn:aws:states:::s3:getObject",
+    "ReaderConfig": {
+     "InputType": "CSV"
+    },
+    "Arguments": {
+     "Bucket": "b",
+     "Key": "k"
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,32 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "M",
+ "States": {
+  "M": {
+   "Type": "Map",
+   "ItemProcessor": {
+    "ProcessorConfig": {
+     "Mode": "DISTRIBUTED",
+     "ExecutionType": "EXPRESS"
+    },
+    "StartAt": "P",
+    "States": {
+     "P": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "Arguments": {
+       "QueueUrl": "u",
+       "MessageBody": {
+        "t": "{% $states.context.Task.Token %}"
+       }
+      },
+      "TimeoutSeconds": 60,
+      "End": true
+     }
+    }
+   },
+   "Items": "{% $states.input.items %}",
+   "End": true
+  }
+ }
+}

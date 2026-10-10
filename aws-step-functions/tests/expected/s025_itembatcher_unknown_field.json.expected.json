@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S025", "/States/M/ItemBatcher/BatchSize"],
+  ["WARNING", "S026", "/States/M/ItemBatcher"]
+]}

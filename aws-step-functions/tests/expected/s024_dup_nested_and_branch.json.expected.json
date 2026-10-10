@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S024", "/States/Fan/Branches/0/States/Put"],
+  ["ERROR", "S024", "/States/Fan/Branches/0/States/Put/Arguments/Item/status"]
+]}

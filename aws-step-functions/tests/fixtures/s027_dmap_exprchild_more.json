@@ -1,0 +1,52 @@
+{
+  "Comment": "S027: EXPRESS child workflows: activity, nested Distributed Map, long Task timeout (also inside an inline Map and a Parallel in the child)",
+  "QueryLanguage": "JSONata",
+  "StartAt": "Fan",
+  "States": {
+    "Fan": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "EXPRESS"},
+        "StartAt": "Activity",
+        "States": {
+          "Activity": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:us-east-1:123456789012:activity:worker",
+            "TimeoutSeconds": 900,
+            "Next": "Inner"
+          },
+          "Inner": {
+            "Type": "Map",
+            "Items": "{% $states.input.parts %}",
+            "ItemProcessor": {
+              "ProcessorConfig": {"Mode": "INLINE"},
+              "StartAt": "Both",
+              "States": {
+                "Both": {
+                  "Type": "Parallel",
+                  "Branches": [
+                    {"StartAt": "Pause", "States": {"Pause": {"Type": "Wait", "Seconds": 600, "End": true}}}
+                  ],
+                  "End": true
+                }
+              }
+            },
+            "Next": "Nested"
+          },
+          "Nested": {
+            "Type": "Map",
+            "Items": "{% $states.input.more %}",
+            "ItemProcessor": {
+              "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+              "StartAt": "Deep",
+              "States": {"Deep": {"Type": "Wait", "Seconds": 3600, "End": true}}
+            },
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "Comment": "Express workflow (EXPRESS by file name) that stays within 5 minutes",
+  "QueryLanguage": "JSONata",
+  "TimeoutSeconds": 300,
+  "StartAt": "Call",
+  "States": {
+    "Call": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Arguments": {"Bucket": "b", "Key": "{% $states.input.key %}"},
+      "TimeoutSeconds": 60,
+      "Next": "Pause"
+    },
+    "Pause": {"Type": "Wait", "Seconds": 300, "Next": "Each"},
+    "Each": {
+      "Type": "Map",
+      "Items": "{% $states.input.items %}",
+      "MaxConcurrency": 10,
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "INLINE"},
+        "StartAt": "Short",
+        "States": {"Short": {"Type": "Wait", "Seconds": "{% $states.input.delay %}", "End": true}}
+      },
+      "End": true
+    }
+  }
+}

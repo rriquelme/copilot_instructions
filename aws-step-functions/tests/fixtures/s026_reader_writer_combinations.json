@@ -1,0 +1,39 @@
+{
+  "Comment": "S026: ReaderConfig/ResultWriter combinations that AWS documents as invalid (JSONPath)",
+  "StartAt": "Inventory",
+  "States": {
+    "Inventory": {
+      "Type": "Map",
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"ManifestType": "S3_INVENTORY", "InputType": "CSV", "CSVHeaderLocation": "FIRST_ROW", "CSVDelimiter": "COLON"},
+        "Parameters": {"Bucket": "inventory-bucket", "Key": "manifest.json"}
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "One",
+        "States": {"One": {"Type": "Pass", "End": true}}
+      },
+      "ResultWriter": {"Parameters": {"Bucket": "results", "Prefix": "inventory"}},
+      "Next": "Flatten"
+    },
+    "Flatten": {
+      "Type": "Map",
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:listObjectsV2",
+        "ReaderConfig": {"Transformation": "LOAD_AND_FLATTEN"},
+        "Parameters": {"Prefix": "logs/"}
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "Two",
+        "States": {"Two": {"Type": "Pass", "End": true}}
+      },
+      "ResultWriter": {"Resource": "arn:aws:states:::s3:putObject"},
+      "ItemBatcher": {"MaxItemsPerBatch": 0},
+      "ToleratedFailureCount": 2.5,
+      "Label": "",
+      "End": true
+    }
+  }
+}

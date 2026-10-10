@@ -1,0 +1,44 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "M",
+ "States": {
+  "M": {
+   "Type": "Map",
+   "ItemProcessor": {
+    "ProcessorConfig": {
+     "Mode": "DISTRIBUTED",
+     "ExecutionType": "STANDARD"
+    },
+    "StartAt": "P",
+    "States": {
+     "P": {
+      "Type": "Pass",
+      "End": true
+     }
+    }
+   },
+   "Items": "{% $states.input.items %}",
+   "Label": "same",
+   "Next": "M2"
+  },
+  "M2": {
+   "Type": "Map",
+   "ItemProcessor": {
+    "ProcessorConfig": {
+     "Mode": "DISTRIBUTED",
+     "ExecutionType": "STANDARD"
+    },
+    "StartAt": "P2",
+    "States": {
+     "P2": {
+      "Type": "Pass",
+      "End": true
+     }
+    }
+   },
+   "Items": "{% $states.input.items %}",
+   "End": true,
+   "Label": "same"
+  }
+ }
+}

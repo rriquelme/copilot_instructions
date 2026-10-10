@@ -1,0 +1,4 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S025", "/States/M/ItemProcessor/ExecutionType"],
+  ["ERROR", "S025", "/States/M/ItemProcessor/Mode"]
+]}

@@ -1,0 +1,12 @@
+{"type": "STANDARD", "diagnostics": [
+  ["ERROR", "S026", "/States/Flatten/ItemBatcher/MaxItemsPerBatch"],
+  ["ERROR", "S026", "/States/Flatten/ItemReader/Parameters"],
+  ["ERROR", "S026", "/States/Flatten/ItemReader/ReaderConfig"],
+  ["ERROR", "S026", "/States/Flatten/Label"],
+  ["ERROR", "S026", "/States/Flatten/ResultWriter"],
+  ["ERROR", "S026", "/States/Flatten/ToleratedFailureCount"],
+  ["ERROR", "S026", "/States/Inventory/ItemReader/ReaderConfig/CSVDelimiter"],
+  ["ERROR", "S026", "/States/Inventory/ItemReader/ReaderConfig/InputType"],
+  ["ERROR", "S026", "/States/Inventory/ResultWriter"],
+  ["INFO", "J000", "/QueryLanguage"]
+]}

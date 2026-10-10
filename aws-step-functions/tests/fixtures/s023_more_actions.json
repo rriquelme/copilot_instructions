@@ -1,0 +1,48 @@
+{
+  "Comment": "S023: wrong-case action (no SDK advice), Bedrock runtime action, other partition, callback suffix kept, no SDK equivalent; a placeholder action and an unknown service are not checked",
+  "StartAt": "CaseTypo",
+  "States": {
+    "CaseTypo": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:GetItem",
+      "Parameters": {"TableName": "orders", "Key": {"pk": {"S.$": "$.id"}}},
+      "Next": "Converse"
+    },
+    "Converse": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::bedrock:converse",
+      "Parameters": {"ModelId": "anthropic.claude-3-haiku-20240307-v1:0", "Messages.$": "$.messages"},
+      "Next": "ChinaBatch"
+    },
+    "ChinaBatch": {
+      "Type": "Task",
+      "Resource": "arn:aws-cn:states:::sns:publishBatch",
+      "Parameters": {"TopicArn": "arn:aws-cn:sns:cn-north-1:123456789012:t", "PublishBatchRequestEntries.$": "$.entries"},
+      "Next": "Callback"
+    },
+    "Callback": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessageBatch.waitForTaskToken",
+      "Parameters": {"QueueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/q", "Entries": [{"Id": "1", "MessageBody.$": "$$.Task.Token"}]},
+      "TimeoutSeconds": 3600,
+      "Next": "ApiGet"
+    },
+    "ApiGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::apigateway:get",
+      "Parameters": {"ApiEndpoint": "example.execute-api.us-east-1.amazonaws.com", "Method": "GET"},
+      "Next": "Placeholder"
+    },
+    "Placeholder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:${DynamoAction}",
+      "Parameters": {"TableName": "orders"},
+      "Next": "UnknownService"
+    },
+    "UnknownService": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::someservice:doThing",
+      "End": true
+    }
+  }
+}

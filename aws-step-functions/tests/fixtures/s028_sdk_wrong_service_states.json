@@ -1,0 +1,14 @@
+{
+ "QueryLanguage": "JSONata",
+ "StartAt": "Q",
+ "States": {
+  "Q": {
+   "Type": "Task",
+   "Resource": "arn:aws:states:::aws-sdk:states:startExecution",
+   "Arguments": {
+    "StateMachineArn": "a"
+   },
+   "End": true
+  }
+ }
+}
