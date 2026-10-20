@@ -136,9 +136,11 @@ Exit code: 0 no ERROR (WARNINGs and INFOs may remain, so read the output),
 1 at least one ERROR, 2 some input could not be linted (an `S000` line says
 why; takes precedence over 1), 3 linter crash.
 
-- Each line is `<file>:<line>: SEVERITY CODE <location>: <message>`.
+- Output: a `<file>:` heading, then one indented line per finding,
+  `SEVERITY CODE:<line>: <message> (at <location>)`, ERRORs first; the last
+  line totals every file (`-- N file(s): N error(s), N warning(s)`).
   `--explain CODE` prints how to fix a code, with a before/after example.
-- Fix every `ERROR`, re-run until `0 error(s)`.
+- Fix every `ERROR`, re-run until the total says `0 error(s)`.
 - Fix every `WARNING` or give a one-line reason it is intended.
 - Only when a diagnostic is truly intended (e.g. a bounded loop flagged by
   `S017`), add `lint-allow <CODE>: <reason>` to the `Comment` of the state it

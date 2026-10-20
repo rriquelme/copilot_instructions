@@ -1,7 +1,7 @@
 # Linter codes
 
 Every code `scripts/lint_asl.py` emits. One code = one kind of fix. Each output line is
-`SEVERITY CODE location: <what is wrong>; <fix>`; the message carries the exact fix for that
+`SEVERITY CODE:<line>: <what is wrong>; <fix> (at <location>)`; the message carries the exact fix for that
 case, this table is the overview.
 
 **Fix every `ERROR` and every `WARNING`.** A WARNING may stay only with a one-line reason in

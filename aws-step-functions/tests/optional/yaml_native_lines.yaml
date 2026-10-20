@@ -1,0 +1,27 @@
+Resources:
+  SM:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      Definition:
+        QueryLanguage: JSONata
+        StartAt: A
+        States:
+          A:
+            Type: Pass
+            Output: "{% $nope %}"
+            Next: B
+          B:
+            Type: Pass
+            Assign:
+              unused: 1
+            End: true
+  SM2:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      DefinitionString: |
+        {
+          "StartAt": "A",
+          "States": {
+            "A": {"Type": "Pass", "Next": "Missing"}
+          }
+        }

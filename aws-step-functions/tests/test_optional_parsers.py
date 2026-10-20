@@ -5,7 +5,8 @@ disables both; this script runs only the cases whose package imports, and prints
 
 Each tests/optional/<file> has tests/optional/<file>.expected.json:
     {"requires": ["jsonata" | "yaml", ...], "type": "STANDARD", "diagnostics": [[severity, code, location], ...],
-     "contains": {"<CODE>@<location>": "<substring>"}}          <- "contains" is optional, as in run_tests.py
+     "contains": {"<CODE>@<location>": "<substring>"},          <- "contains" is optional, as in run_tests.py
+     "lines": {"<CODE>@<location>": <line in the file>}}        <- optional: pins the reported line
 With jsonata-python installed it also lints every tests/fixtures/ok_* fixture with the parser on and fails on any
 J006 there (the parser must accept everything the golden suite calls clean).
 
@@ -65,6 +66,8 @@ def main(argv: list[str]) -> int:
         if update:
             runner.write_expected(exp_path, execution_type, got, expected.get("contains"))
             text = exp_path.read_text(encoding="utf-8")
+            if expected.get("lines"):
+                text = text.rstrip()[:-1] + ', "lines": ' + json.dumps(expected["lines"]) + "}" + chr(10)
             exp_path.write_bytes(text.replace("{", '{"requires": ' + json.dumps(requires) + ", ", 1).encode("utf-8"))
             print(f"updated {fx.name}")
             continue
@@ -72,6 +75,11 @@ def main(argv: list[str]) -> int:
         problems = [f"missing     {' '.join(d)}" for d in want if d not in got]
         problems += [f"unexpected  {' '.join(d)}" for d in got if d not in want]
         problems += runner.check_contains(expected.get("contains") or {}, diags.items) if expected else ["no expected file"]
+        for key, line in (expected.get("lines") or {}).items():
+            code, loc = key.split("@", 1)
+            got_lines = [d.get("line") for d in diags.items if d["code"] == code and d["location"] == loc]
+            if line not in got_lines:
+                problems.append(f"line        {key}: want line {line}, got {got_lines}")
         if problems:
             failed += 1
             print(f"FAIL {fx.name}")

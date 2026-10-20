@@ -1261,8 +1261,10 @@ class HclObjectReader:
     such as aws_lambda_function.f.arn, function calls, conditionals) and every ${...} interpolation becomes the
     placeholder "__TPL__", as in extract_embedded. for expressions and %{ } directives raise HclError."""
 
-    def __init__(self, text: str, pos: int) -> None:
+    def __init__(self, text: str, pos: int, offsets: Optional[dict[str, int]] = None) -> None:
         self.t, self.i, self.n, self.depth = text, pos, len(text), 0
+        self.offsets = offsets  # when given: key path ("/States/A/Next") -> offset of the key, as json_key_offsets
+        self.path = ""
 
     def fail(self, what: str) -> None:
         raise HclError(what, min(self.i, self.n))
@@ -1331,6 +1333,7 @@ class HclObjectReader:
                 self.i += 1
                 return out
             m = HCL_IDENT_RE.match(self.t, self.i)
+            key_start = self.i
             if c == '"':
                 key = self.string()
             elif c == "(":  # computed key (var.name) = ...
@@ -1347,7 +1350,14 @@ class HclObjectReader:
                 self.fail(f'expected "=" after the key {json.dumps(key)}')
             self.i += 1
             self.skip(False)
-            out[key] = self.value()
+            if self.offsets is None:
+                out[key] = self.value()
+            else:
+                parent = self.path
+                self.path = f"{parent}/{key}"
+                self.offsets.setdefault(self.path, key_start)
+                out[key] = self.value()
+                self.path = parent
             self.skip(False)
             if self.i < self.n and self.t[self.i] == ",":
                 self.i += 1
@@ -1366,7 +1376,14 @@ class HclObjectReader:
             if self.t[self.i] == "]":
                 self.i += 1
                 return out
-            out.append(self.value())
+            if self.offsets is None:
+                out.append(self.value())
+            else:
+                parent = self.path
+                self.path = f"{parent}/{len(out)}"
+                self.offsets.setdefault(self.path, self.i)
+                out.append(self.value())
+                self.path = parent
             self.skip(True)
             if self.i < self.n and self.t[self.i] == ",":
                 self.i += 1
@@ -5139,6 +5156,48 @@ class SourceMap:
         self.newlines: Optional[list[int]] = None
         self.root: Optional[dict[str, int]] = None
         self.used: set[tuple[int, str]] = set()  # embedded (chunk start, path) already matched to a definition
+        self.no_hcl: set[int] = set()  # lines without a jsonencode(
+        self.yaml: Optional[dict[str, int]] = None  # YAML key path -> offset (with PyYAML), for YAML templates
+        self.yaml_json: dict[str, int] = {}  # YAML path of a string value that starts with "{" -> offset of the "{"
+
+    def yaml_offsets(self) -> dict[str, int]:
+        """Key path -> offset for a YAML document (composed with PyYAML: nodes only, nothing constructed)."""
+        if self.yaml is not None:
+            return self.yaml
+        self.yaml = {}
+        yaml = load_yaml()
+        if yaml is None:
+            return self.yaml
+        try:
+            root = yaml.compose(self.text, Loader=_yaml_loader(yaml))
+        except (yaml.YAMLError, ValueError, TypeError, RecursionError):
+            return self.yaml
+        self.line(0)
+        nl = self.newlines or []
+
+        def offset(mark) -> int:  # noqa: ANN001 - line/column: libyaml's index may count bytes
+            return (nl[mark.line - 1] + 1 if 0 < mark.line <= len(nl) else 0) + mark.column
+
+        work = [(root, "")]
+        while work:
+            node, path = work.pop()
+            if isinstance(node, yaml.MappingNode):
+                for k, v in node.value:
+                    if isinstance(k, yaml.ScalarNode):
+                        p = f"{path}/{k.value}"
+                        self.yaml.setdefault(p, offset(k.start_mark))
+                        work.append((v, p))
+            elif isinstance(node, yaml.SequenceNode):
+                for i, v in enumerate(node.value):
+                    p = f"{path}/{i}"
+                    self.yaml.setdefault(p, offset(v.start_mark))
+                    work.append((v, p))
+            elif isinstance(node, yaml.ScalarNode) and isinstance(node.value, str) and node.value.lstrip().startswith("{") \
+                    and node.style in ("|", ">"):
+                brace = self.text.find("{", offset(node.start_mark), offset(node.end_mark) + 1)
+                if brace >= 0:
+                    self.yaml_json[path] = brace
+        return self.yaml
 
     def line(self, pos: int) -> int:
         if self.newlines is None:
@@ -5159,7 +5218,15 @@ class SourceMap:
         a JSON path in the input (CloudFormation JSON), or "line N[ resource][ /path]" (embedded at line N)."""
         root = self.root_offsets()
         if not label.startswith("line "):
-            return root, "" if label == "/" else label
+            path = "" if label == "/" else label
+            if path and path not in root and path in self.yaml_offsets():
+                if path in self.yaml_json:  # DefinitionString: | (JSON text inside the YAML, on its own lines)
+                    offsets = json_key_offsets(self.text, self.yaml_json[path])
+                    if "/StartAt" in offsets and "/States" in offsets:
+                        return offsets, ""
+                    return {"": self.yaml_json[path]}, ""
+                return self.yaml_offsets(), path
+            return root, path
         if "string" in root:  # lines inside a JSON-encoded string are all on the string's line
             return {"": root["string"]}, ""
         m = re.match(r"line (\d+)", label)
@@ -5183,6 +5250,26 @@ class SourceMap:
             if (path in offsets) if path else ("/StartAt" in offsets and "/States" in offsets):
                 self.used.add((s, path))
                 return offsets, path
+        if n in self.no_hcl:
+            return {"": lo}, ""
+        found_hcl = False
+        for j in JSONENCODE_RE.finditer(self.text, lo, hi):  # Terraform jsonencode({...}): HCL, not JSON
+            found_hcl = True
+            if (j.start(), "") in self.used:
+                continue
+            offsets = {"": j.start()}
+            reader = HclObjectReader(self.text, j.end(), offsets)
+            try:
+                reader.skip(True)
+                if reader.i < reader.n and self.text[reader.i] == "{":
+                    reader.value()
+            except (HclError, RecursionError):
+                pass
+            if "/StartAt" in offsets and "/States" in offsets:
+                self.used.add((j.start(), ""))
+                return offsets, ""
+        if not found_hcl:
+            self.no_hcl.add(n)  # many definitions on one line: scan it for jsonencode( once
         return {"": lo}, ""  # not found: everything on the definition's first line
 
 
@@ -5309,20 +5396,41 @@ def document_order(diags: Diagnostics, items: list[dict]) -> list[dict]:
                                          SEVERITY_ORDER.get(it["severity"], 3), seq[id(it)]))
 
 
-def text_lines(name: str, items: list[dict]) -> list[str]:
-    """`<file>:<line>: SEVERITY CODE <location>: <message>`; a code+message repeated GROUP_MIN+ times is printed once."""
-    groups: dict[tuple[str, str, str], list[dict]] = {}
-    for it in items:
-        groups.setdefault((it["severity"], it["code"], it["message"]), []).append(it)
-    out = []
-    for it in items:
-        group = groups[(it["severity"], it["code"], it["message"])]
-        where = f"{name}:{it['line']}:" if it.get("line") else f"{name}:"
+def text_item(it: dict, lines: str = "", extra: str = "") -> str:
+    """`SEVERITY CODE:<line>: <message> (at <location>)`."""
+    line = lines or (str(it["line"]) if it.get("line") else "")
+    loc = it.get("definition", {}).get("path", it["location"]) if isinstance(it.get("definition"), dict) else it["location"]
+    at = f" (at {loc}{extra})" if loc != "/" or extra else ""
+    return f"{it['severity']} {it['code']}{':' + line if line else ''}: {it['message']}{at}"
+
+
+def text_lines(items: list[dict], indent: str = "  ") -> list[str]:
+    """One file's diagnostics under its name: ERRORs, then WARNINGs, then INFOs, each by line; a file with several
+    definitions gets a sub-heading per definition. A code+message repeated GROUP_MIN+ times is printed once."""
+    ordered = sorted(items, key=lambda it: (it.get("definition", {}).get("index", 0) if isinstance(it.get("definition"), dict) else 0,
+                                            SEVERITY_ORDER.get(it["severity"], 3)))
+    groups: dict[tuple[Any, str, str, str], list[dict]] = {}
+    for it in ordered:
+        dfn = it.get("definition") if isinstance(it.get("definition"), dict) else {}
+        groups.setdefault((dfn.get("index", 0), it["severity"], it["code"], it["message"]), []).append(it)
+    out: list[str] = []
+    heading = None
+    for it in ordered:
+        dfn = it.get("definition") if isinstance(it.get("definition"), dict) else {}
+        pad = indent
+        if dfn:
+            pad = indent * 2
+            if dfn.get("index") != heading:
+                heading = dfn.get("index")
+                out.append(f"{indent}definition {heading}: {dfn.get('label', '')}")
+        group = groups[(dfn.get("index", 0), it["severity"], it["code"], it["message"])]
         if len(group) < GROUP_MIN:
-            out.append(f"{where} {it['severity']} {it['code']} {it['location']}: {it['message']}")
+            out.append(pad + text_item(it))
         elif group[0] is it:
-            locs = ", ".join(f"{g['location']} (line {g['line']})" if g.get("line") else g["location"] for g in group)
-            out.append(f"{where} {it['severity']} {it['code']} at {len(group)} locations: {locs}: {it['message']}")
+            lines = ",".join(dict.fromkeys(str(g.get("line") or "?") for g in group))
+            paths = ", ".join((g.get("definition") or {}).get("path", g["location"]) if isinstance(g.get("definition"), dict)
+                              else g["location"] for g in group[1:])
+            out.append(pad + text_item(it, lines, f", and {len(group) - 1} more: {paths}"))
     return out
 
 
@@ -5529,6 +5637,7 @@ def main(argv: list[str]) -> int:
     jsonata = load_jsonata()
     exit_code = 0
     report = []
+    totals = {"ERROR": 0, "WARNING": 0, "INFO": 0, "suppressed": 0, "files": 0}
     for f in files:
         text, read_error = read_input(f)
         if text is None:
@@ -5550,21 +5659,26 @@ def main(argv: list[str]) -> int:
             for line in github_lines(None if f == "-" else f, items):
                 print(line)
         elif fmt == "text":
+            totals["files"] += 1
+            for it in items:
+                totals[it["severity"]] = totals.get(it["severity"], 0) + 1
+            totals["suppressed"] += len(diags.suppressed)
             name = "<stdin>" if f == "-" else f
-            print(f"== {f}{f' ({count} definitions)' if count > 1 else ''}")
-            for line in text_lines(name, items):
+            what = f" {count} definitions" if count > 1 else ""
+            print(f"{name}:{what}" if items or diags.suppressed or what else f"{name}: OK")
+            for line in text_lines(items):
                 print(line)
-            note = "" if jsonata else " [jsonata-python not installed: expression syntax not parsed; pip install jsonata-python]"
-            if count == 0:
-                note = " - nothing was linted"
-            print(f"-- {diags.errors} error(s), {diags.warnings} warning(s){note}")
             if diags.suppressed:
                 if args.show_suppressed:
                     for it in document_order(diags, diags.suppressed):
-                        where = f"{name}:{it['line']}:" if it.get("line") else f"{name}:"
-                        print(f"{where} suppressed {it['severity']} {it['code']} {it['location']}: {it['message']} "
-                              f"[lint-allow: {it.get('suppressedBy', '')}]")
-                print(f"-- {len(diags.suppressed)} suppressed" + ("" if args.show_suppressed else " (--show-suppressed lists them)"))
+                        print(f"  suppressed {text_item(it)} [lint-allow: {it.get('suppressedBy', '')}]")
+                print(f"  ({len(diags.suppressed)} suppressed" + (")" if args.show_suppressed else "; --show-suppressed lists them)"))
+    if fmt == "text":
+        info = f", {totals['INFO']} info" if totals["INFO"] else ""
+        sup = f", {totals['suppressed']} suppressed" if totals["suppressed"] else ""
+        print(f"\n-- {totals['files']} file(s): {totals['ERROR']} error(s), {totals['WARNING']} warning(s){info}{sup}")
+        if not jsonata:
+            print("-- jsonata-python not installed: expression syntax not parsed; pip install jsonata-python")
     if fmt == "json":
         print(json.dumps({"jsonataParser": jsonata is not None, "files": report}, indent=2))
     elif fmt == "sarif":

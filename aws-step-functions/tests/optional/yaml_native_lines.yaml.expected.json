@@ -1,0 +1,13 @@
+{"requires": ["yaml"], "type": "STANDARD", "diagnostics": [
+  ["ERROR", "S002", "[2:/Resources/SM2/Properties/DefinitionString] /States/A/Next"],
+  ["ERROR", "V001", "[1:/Resources/SM/Properties/Definition] /States/A/Output"],
+  ["INFO", "J000", "[2:/Resources/SM2/Properties/DefinitionString] /QueryLanguage"],
+  ["INFO", "S000", "[1:/Resources/SM/Properties/Definition] /"],
+  ["INFO", "S000", "[2:/Resources/SM2/Properties/DefinitionString] /"],
+  ["WARNING", "V005", "[1:/Resources/SM/Properties/Definition] /States/B"],
+  ["WARNING", "V006", "[1:/Resources/SM/Properties/Definition] /States/B/Assign/unused"]
+], "lines": {
+  "V001@[1:/Resources/SM/Properties/Definition] /States/A/Output": 11,
+  "V006@[1:/Resources/SM/Properties/Definition] /States/B/Assign/unused": 16,
+  "S002@[2:/Resources/SM2/Properties/DefinitionString] /States/A/Next": 25
+}}

@@ -139,13 +139,14 @@ def line_numbers(d: Path, tmp: str) -> None:
     (d / "pretty.json").write_text(pretty, encoding="utf-8")
     want = pretty.splitlines().index('      "Next": "Nope"') + 1
     code, out = run(["pretty.json"], cwd=tmp)
-    check("text output: <file>:<line>: SEVERITY CODE <location>: <message>",
-          code == 1 and f"pretty.json:{want}: ERROR S002 /States/A/Next: Next targets" in out, out)
+    check("text output: '<file>:' then '  SEVERITY CODE:<line>: <message> (at <location>)', then the total",
+          code == 1 and out.splitlines()[0] == "pretty.json:" and out.splitlines()[1].startswith(f"  ERROR S002:{want}: Next targets")
+          and "(at /States/A/Next)" in out and "-- 1 file(s): 1 error(s), 0 warning(s)" in out, out)
     code, out = run(["--json", "pretty.json"], cwd=tmp)
     data = parse_json(out)
     check("--json: diagnostics carry the line", data is not None and data["files"][0]["diagnostics"][0]["line"] == want, out)
     code, out = run(["-"], stdin=pretty.encode("utf-8"), cwd=tmp)
-    check("stdin: <stdin>:<line>:", f"<stdin>:{want}: ERROR S002" in out, out)
+    check("stdin: <stdin>: heading", out.startswith("<stdin>:") and f"ERROR S002:{want}:" in out, out)
 
     tf = ('resource "aws_sfn_state_machine" "sm" {\n  name = "x"\n  definition = <<EOF\n{\n  "QueryLanguage": "JSONata",\n'
           '  "StartAt": "A",\n  "States": {\n    "A": {"Type": "Pass",\n          "Next": "${next}"}, "B": {"Type": "Pass",\n'
@@ -153,34 +154,38 @@ def line_numbers(d: Path, tmp: str) -> None:
     (d / "sm.tf").write_text(tf, encoding="utf-8")
     code, out = run(["sm.tf"], cwd=tmp)
     check("Terraform heredoc: the line in the .tf file (chunk start line added)",
-          code == 1 and "sm.tf:10: ERROR S002 /States/B/Next" in out and "sm.tf:4: INFO S000 /: extracted" in out, out)
+          code == 1 and "ERROR S002:10: " in out and "(at /States/B/Next)" in out and "INFO S000:4: extracted" in out, out)
+
+    code, out = run([str(HERE / "fixtures" / "tf_jsonencode_errors.tf")], cwd=tmp)
+    check("Terraform jsonencode (HCL): the line of each field, not of the resource",
+          "ERROR S009:11: " in out and "ERROR S003:14: " in out and "ERROR S002:25: " in out, out)
 
     yaml = ("Resources:\n  SM:\n    Type: AWS::StepFunctions::StateMachine\n    Properties:\n      DefinitionString: !Sub |\n"
             "        {\n          \"QueryLanguage\": \"JSONata\",\n          \"StartAt\": \"A\",\n          \"States\": {\n"
             "            \"A\": {\"Type\": \"Pass\",\n                  \"Next\": \"Nope\"}\n          }\n        }\n")
     (d / "sm.yaml").write_text(yaml, encoding="utf-8")
     code, out = run(["sm.yaml"], cwd=tmp)
-    check("CloudFormation YAML DefinitionString: the line in the template", code == 1 and "sm.yaml:11: ERROR S002" in out, out)
+    check("CloudFormation YAML DefinitionString: the line in the template", code == 1 and "ERROR S002:11:" in out, out)
 
     cfn = json.dumps({"Resources": {"SM": {"Type": "AWS::StepFunctions::StateMachine",
                                            "Properties": {"DefinitionString": BAD_NEXT}}}}, indent=2)
     (d / "cfn.json").write_text(cfn, encoding="utf-8")
     want = next(i for i, line in enumerate(cfn.splitlines(), 1) if '"DefinitionString"' in line)
     code, out = run(["cfn.json"], cwd=tmp)
-    check("CloudFormation JSON DefinitionString (one string): the line of the string", f"cfn.json:{want}: ERROR S002" in out, out)
+    check("CloudFormation JSON DefinitionString (one string): the line of the string", f"ERROR S002:{want}:" in out, out)
 
     code, out = run(["invalid.json"], cwd=tmp)
-    check("invalid JSON: the line from the parser error", "invalid.json:1: ERROR S000" in out, out)
+    check("invalid JSON: the line from the parser error", "ERROR S000:1:" in out, out)
     code, out = run(["missing.json"], cwd=tmp)
-    check("unreadable file: no line number", "missing.json: ERROR S000" in out, out)
+    check("unreadable file: no line number", "ERROR S000: cannot read" in out, out)
 
 
 def order_and_grouping(d: Path, tmp: str) -> None:
     states = {f"S{i}": {"Type": "Pass", "Next": f"NoSuchStateNumber{i}"} for i in range(1, 13)}
     (d / "order.json").write_text(json.dumps({"QueryLanguage": "JSONata", "StartAt": "S1", "States": states}, indent=2), encoding="utf-8")
     code, out = run(["order.json"], cwd=tmp)
-    pos = [out.find(f"/States/S{i}/Next:") for i in range(1, 13)]
-    check("text output in document order (S2 before S10), not by location string", all(p >= 0 for p in pos) and pos == sorted(pos), out)
+    pos = [out.find(f"(at /States/S{i}/Next)") for i in range(1, 13)]
+    check("same severity in document order (S2 before S10), not by location string", all(p >= 0 for p in pos) and pos == sorted(pos), out)
 
     st = {"QueryLanguage": "JSONata", "StartAt": "A", "States": {
         "A": {"Type": "Pass", "Next": "B", "Bogus": 1},
@@ -188,10 +193,10 @@ def order_and_grouping(d: Path, tmp: str) -> None:
         "Z": {"Type": "Succeed"}}}
     (d / "sev.json").write_text(json.dumps(st, indent=2), encoding="utf-8")
     code, out = run(["sev.json"], cwd=tmp)
-    check("state order first: A's ERROR, then B's WARNING", 0 <= out.find("ERROR S009 /States/A/Bogus") < out.find("WARNING S049 /States/B"), out)
+    check("ERRORs first, then WARNINGs", 0 <= out.find("ERROR S009:") < out.find("WARNING S049:"), out)
 
     code, out = run(["two.json"], cwd=tmp)
-    check("several definitions: definition index first", 0 <= out.find("[1:") < out.find("[2:"), out)
+    check("several definitions: one sub-heading each, in order", 0 <= out.find("  definition 1: ") < out.find("  definition 2: "), out)
 
     rep = {f"S{i}": {"Type": "Pass", "Bogus": 1, "Next": f"S{i + 1}" if i < 4 else "S5"} for i in range(5)}
     rep["S5"] = {"Type": "Pass", "Bogus": 1, "End": True}
@@ -199,8 +204,8 @@ def order_and_grouping(d: Path, tmp: str) -> None:
     code, out = run(["rep.json"], cwd=tmp)
     lines = [line for line in out.splitlines() if "S009" in line]
     check("same code and message 4+ times: printed once with every location and line",
-          len(lines) == 1 and "S009 at 6 locations: /States/S0/Bogus (line " in lines[0] and "/States/S5/Bogus (line " in lines[0]
-          and lines[0].startswith("rep.json:") and "6 error(s)" in out, out)
+          len(lines) == 1 and lines[0].startswith("  ERROR S009:") and "(at /States/S0/Bogus, and 5 more: " in lines[0]
+          and "/States/S5/Bogus" in lines[0] and "6 error(s)" in out, out)
     code, out = run(["--json", "rep.json"], cwd=tmp)
     data = parse_json(out)
     check("--json: repeated diagnostics stay one item each",
@@ -215,7 +220,7 @@ def order_and_grouping(d: Path, tmp: str) -> None:
     (d / "shadow.json").write_text(shadow, encoding="utf-8")
     code, out = run(["shadow.json"], cwd=tmp)
     check("other locations named in a message carry their line (V004 outer Assign, S007 name with a space)",
-          "shadow.json:4: WARNING V004 /States/Each/ItemProcessor/States/Dup name/Assign/limit" in out
+          "WARNING V004:4: " in out and "(at /States/Each/ItemProcessor/States/Dup name/Assign/limit)" in out
           and "at /States/Init/Assign/limit (line 2)" in out and "already used at /States/Dup name (line 6)" in out, out)
 
     typo = json.dumps({"QueryLanguage": "JSONata", "StartAt": "Get", "States": {
@@ -243,10 +248,10 @@ def suppressions(d: Path, tmp: str) -> None:
     (d / "other.json").write_text(sm("lint-allow S017: unrelated"), encoding="utf-8")
     code, out = run(["allow.json"], cwd=tmp)
     check("lint-allow with a reason: the error is suppressed, exit 0, '-- 1 suppressed'",
-          code == 0 and "S009" not in out and "0 error(s)" in out and out.rstrip().splitlines()[-1].startswith("-- 1 suppressed"), out)
+          code == 0 and "S009" not in out and "0 error(s)" in out and "(1 suppressed;" in out and ", 1 suppressed" in out, out)
     code, out = run(["--show-suppressed", "allow.json"], cwd=tmp)
     check("--show-suppressed lists it with its reason",
-          code == 0 and "suppressed ERROR S009 /States/A/Bogus" in out and "Bogus is read by our deploy tooling" in out, out)
+          code == 0 and "  suppressed ERROR S009:" in out and "(at /States/A/Bogus)" in out and "Bogus is read by our deploy tooling" in out, out)
     code, out = run(["--json", "allow.json"], cwd=tmp)
     data = parse_json(out)
     check("--json: suppressed diagnostics in a separate list",
@@ -256,7 +261,8 @@ def suppressions(d: Path, tmp: str) -> None:
     check("lint-allow with several codes", code == 0 and "1 suppressed" in out, out)
     code, out = run(["noreason.json"], cwd=tmp)
     check("lint-allow without a reason: ignored, with an INFO saying why, still exit 1",
-          code == 1 and "ERROR S009" in out and "INFO S000 /States/A/Comment" in out and "no reason" in out and "suppressed" not in out.splitlines()[-1], out)
+          code == 1 and "ERROR S009" in out and "INFO S000:" in out and "(at /States/A/Comment)" in out and "no reason" in out
+          and "1 suppressed" not in out, out)
     code, out = run(["other.json"], cwd=tmp)
     check("lint-allow of another code does not suppress", code == 1 and "ERROR S009" in out, out)
 
@@ -296,7 +302,7 @@ def main() -> int:
 
         code, out = run(["missing.json", "clean.json"], cwd=tmp)
         check("missing file reported, other files still linted, exit 2",
-              code == 2 and "cannot read file" in out and "== clean.json" in out and "Traceback" not in out, out)
+              code == 2 and "cannot read file" in out and "clean.json: OK" in out and "-- 2 file(s)" in out and "Traceback" not in out, out)
         code, out = run(["sub"], cwd=tmp)
         check("directory argument -> message suggesting a glob, exit 2", code == 2 and "directory" in out and "*.json" in out, out)
         code, out = run(["binary.json"], cwd=tmp)
@@ -307,7 +313,7 @@ def main() -> int:
         check(f"device {os.devnull} -> not a regular file, exit 2", code == 2 and "not a regular file" in out, out)
 
         code, out = run(["c*.json"], cwd=tmp)
-        check("glob expanded by the linter", code == 0 and "== clean.json" in out, out)
+        check("glob expanded by the linter", code == 0 and "clean.json: OK" in out, out)
         code, out = run(["nomatch*.json"], cwd=tmp)
         check("glob without matches -> message, exit 2", code == 2 and "no files match" in out, out)
 
@@ -333,9 +339,10 @@ def main() -> int:
             "B": {"Properties": {"DefinitionString": {"Fn::Sub": BAD_NEXT}}}}}), encoding="utf-8")
         code, out = run(["two.json"], cwd=tmp)
         check("two definitions: every diagnostic says which one, one note per definition",
-              code == 1 and "S002 [2:/Resources/B/Properties/DefinitionString] /States/A/Next" in out
-              and "[1:/Resources/A/Properties/Definition] /: linted" in out
-              and "[2:/Resources/B/Properties/DefinitionString] /: linted" in out, out)
+              code == 1 and "two.json: 2 definitions" in out
+              and out.find("  definition 1: /Resources/A/Properties/Definition") < out.find("linted the state machine definition found")
+              < out.find("  definition 2: /Resources/B/Properties/DefinitionString") < out.find("    ERROR S002:")
+              and "(at /States/A/Next)" in out, out)
         code, out = run(["--json", "two.json"], cwd=tmp)
         try:
             diags = json.loads(out)["files"][0]["diagnostics"]
@@ -373,7 +380,7 @@ def main() -> int:
         (Path(tmp) / "big.json").write_text(big, encoding="utf-8")
         code, out = run(["big.json"], cwd=tmp)
         check("definition over 1 MB -> ERROR S039 at /, no per-field WARNING for 200 KB literals, exit 1",
-              code == 1 and "ERROR S039 /:" in out and "WARNING S039" not in out, out)
+              code == 1 and "ERROR S039:" in out and "WARNING S039" not in out, out)
 
     # internal-error safety net (in-process: force lint_definition to crash)
     spec = importlib.util.spec_from_file_location("lint_asl_cli_test", LINTER)
